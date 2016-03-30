@@ -9,9 +9,68 @@ import subprocess, sys, os
 '''
 
 ##########################################################
-def getInput():
+def checkInput():
+  # read the Gaussian input file and check for problems
 
-  global f_input, gdv, queue, allocation, version, n_nodes, n_cores, time, f_output
+  gauss_input = str(f_input[0])+'.'+str(f_input[1])
+  f = open(gauss_input,'r')
+  contents = f.readlines()
+  found_linda = False
+  memory = 0
+
+  for line in contents:
+    if 'lindaworker' in line.lower(): found_linda = True 
+    if 'mem' in line.lower():
+      mem_line = line.split('=')
+      mem_line[-1] = mem_line[-1].strip()
+      if 'gb' in mem_line[1].lower(): 
+        gb = True
+        mem = mem_line[1].lower().split('gb')
+        memory = int(mem[0])
+      else:
+        gb = False
+        print('\nThis script only checks the memory if it\'s specified\n'
+             +'in Gb. Your calculation may still be fine, but this\n'
+             +'script won\'t check. This is just a warning.\n')
+    if 'nproc' in line.lower():
+      nproc_line = line.split('=')
+      nproc_line[-1] = nproc_line[-1].strip()
+      nproc = int(nproc_line[1])
+
+  if memory > 32 and gb and allocation == 'hyak-stf':
+    print('\nGenerally you don\'t want to specify more than half\n'
+         +'the memory on a node. You\'ve asked for '+str(memory)+'Gb and\n'
+         +'the STF nodes only have 64Gb (except for n0868/n0870)\n'
+         +'This is just a warning.\n')
+
+  if nproc > 16 and allocation == 'hyak-stf':
+    print('\nYou should not specify to use more cores than the\n'
+         +'number available on your node. The STF nodes have 16 cores\n'
+         +'and you\'ve asked for '+str(nproc)+' cores. Please lower\n'
+         +'the number of cores you\'ve requested in your input file.\n')
+    sys.exit()
+ 
+  if nproc < 16 and allocation == 'hyak-stf':
+    print('You usually want to use all the cores on a node. The\n'
+         +'STF nodes have 16 cores and you\'ve only asked for '+str(nproc)+' cores.\n'
+         +'There are some situations where you may want to use fewer\n'
+         +'than the maximum number of cores, however, such as in the\n'
+         +'case where you want to limit the memory requirements for\n'
+         +'the calculation. This is just a warning.\n')
+
+  if linda and not found_linda:
+    print('\nYour input file does not contain %lindaworker, but\n'
+         +'you have asked to use more than one node. Please add\n'
+         +'this line or request only one node.\n')
+    sys.exit()
+
+##########################################################
+
+##########################################################
+def getInput():
+  # grab input from the user about what type of job to run
+
+  global f_input, gdv, queue, allocation, version, n_nodes, linda, n_cores, time, f_output
 
   #--------------------------------------
   # there should only be one argument (Gaussian input file) 
@@ -72,8 +131,7 @@ def getInput():
       if 'hyak-stf' in allocation: print('- (default) ',end='')
     print(': ',end='')
     allocation = raw_input('')
-    if allocation == '' and 'hyak-stf' in allocs:
-      allocation = 'hyak-stf'
+    if allocation == '' and 'hyak-stf' in allocs: allocation = 'hyak-stf'
     if allocation not in allocs:
       print('You must choose an allocation that you are a part of')
       printHelp()
@@ -84,49 +142,24 @@ def getInput():
   #--------------------------------------
 
   #--------------------------------------
-  # determine which version of Gaussian to use (no default)
-  g09_versions = ['d01','e01']
-  gdv_versions = ['h12p','i01p','i03','i03p','i04p']
-  print('Which version of Gaussian would you like to use?')
-  for version in g09_versions: print('[g09.'+version+']',end=' ') 
-  if gdv:
-    for version in gdv_versions: print('[gdv.'+version+']',end=' ') 
-  print('- (default) ',end='')
-  print(': ',end='')
-  version = raw_input('')
-  if version == '':
-    if gdv:
-      version = 'gdv.'+gdv_versions[-1]
-    else:
-      version = 'g09.'+g09_versions[-1]
-  version_name = version.split('.')
-  if version_name[1] not in g09_versions: 
-    if version_name[1] not in gdv_versions and gdv == False:
-      print('You have not chosen a valid version of Gaussian - '+version_name[1])
-      printHelp()
-      sys.exit()
-  print('Using the '+version+' version of Gaussian\n')  
-  #--------------------------------------
-
-  #--------------------------------------
   # ask how many nodes to use
-  allocation_name = allocation.split('-')
-  command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-  proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-  max_nodes = int(proc.stdout.read())
-  n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
-  if n_nodes == '':
-    n_nodes = 1
+  if allocation != 'hyak-stf':
+    print('Checking how many nodes are in this allocation...')
+    allocation_name = allocation.split('-')
+    command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+    max_nodes = int(proc.stdout.read())
   else:
-    n_nodes = int(n_nodes)
+    max_nodes = 54
+  n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
+  if n_nodes == '': n_nodes = 1
+  else: n_nodes = int(n_nodes)
   if n_nodes < 1 or n_nodes >= max_nodes:
     print('You must select at least one node and less than '+str(max_nodes))
     printHelp()
     sys.exit()
-  if n_nodes > 1:
-    linda = True
-  else:
-    linda = False
+  if n_nodes > 1: linda = True
+  else: linda = False
   if linda:
     print('NOTE: You must include "%lindaworker" in your\n'
          +'      input file when using more than one node') 
@@ -134,20 +167,26 @@ def getInput():
  
   #--------------------------------------
   # ask how many cores on each node to use
-  print('Checking what types of nodes are available...')
-  max_cores = []
-  command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-  proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-  max_16_cores= int(proc.stdout.read())
-  if max_16_cores != 0: smallest_node = 16 
-  command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-  proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-  max_12_cores= int(proc.stdout.read())
-  if max_12_cores != 0: smallest_node = 12 
-  command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-  proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-  max_8_cores= int(proc.stdout.read())
-  if max_8_cores != 0: smallest_node = 8
+  if allocation != 'hyak-stf':
+    print('Checking what types of nodes are in this allocation...')
+    max_cores = []
+    command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+    max_16_cores= int(proc.stdout.read())
+    if max_16_cores != 0: smallest_node = 16 
+    command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+    max_12_cores= int(proc.stdout.read())
+    if max_12_cores != 0: smallest_node = 12 
+    command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+    max_8_cores= int(proc.stdout.read())
+    if max_8_cores != 0: smallest_node = 8
+  else:
+    max_8_cores   = 0
+    max_12_cores  = 0
+    max_16_cores  = 54
+    smallest_node = 16
   n_cores = raw_input('How many cores do you want to use on each node? (default='+str(smallest_node)+') : ')
   if n_cores == '': n_cores = 0
   if int(n_cores) < smallest_node:
@@ -171,26 +210,51 @@ def getInput():
   #--------------------------------------
 
   #--------------------------------------
-  time = raw_input('For how many hours do you want to run your calculation? (default=1) : ')
-  if time == '':
-    time = int(1)
-  else:
-    time = int(time)
-  print('Running the calculation for '+str(time)+' hr(s)\n')
+  # determine which version of Gaussian to use (no default)
+  g09_versions = ['d01','e01']
+  gdv_versions = ['h12p','i01p','i03','i03p','i04p']
+  print('Which version of Gaussian would you like to use?')
+  for version in g09_versions: print('[g09.'+version+']',end=' ') 
+  if gdv:
+    for version in gdv_versions: print('[gdv.'+version+']',end=' ') 
+  print('- (default) ',end='')
+  print(': ',end='')
+  version = raw_input('')
+  if version == '':
+    if gdv: version = 'gdv.'+gdv_versions[-1]
+    else: version = 'g09.'+g09_versions[-1]
+  version_name = version.split('.')
+  if version_name[1] not in g09_versions: 
+    if version_name[1] not in gdv_versions and gdv == False:
+      print('You have not chosen a valid version of Gaussian - '+version_name[1])
+      printHelp()
+      sys.exit()
+  print('Using the '+version+' version of Gaussian\n')  
   #--------------------------------------
 
   #--------------------------------------
+  # check what the max walltime should be
+  time = raw_input('For how many hours do you want to run your calculation? (default=1) : ')
+  if time == '': time = int(1)
+  else: time = int(time)
+  if queue == 'bf' and time != 5:
+    print('You generally want to specify 5 hrs when using the bf queue\n'
+         +'This is just a warning.\n')
+  print('Running the calculation for '+str(time)+' hr(s).\n')
+  #--------------------------------------
+
+  #--------------------------------------
+  # get a name for the .pbs script
   f_output = raw_input('What should we call the .pbs script? (default='+f_input[0]+'.pbs) : ')
-  if f_output == '': 
-    f_output = f_input[0]+'.pbs'
-  else:
-    f_output = f_output+'.pbs'
+  if f_output == '': f_output = f_input[0]+'.pbs'
+  else: f_output = f_output+'.pbs'
   #--------------------------------------
 
 ##########################################################
 
 ##########################################################
 def printHelp():
+  # print some helpful information for the user
  
   print('\nNAME\n'
        +'\tGaussian-Submit\n\n'
@@ -202,10 +266,12 @@ def printHelp():
 
 ##########################################################
 def writePBS():
+  # make a .pbs script based on the user specifications
 
+  gauss_input = str(f_input[0])+'.'+str(f_input[1])
   print('Writing to '+f_output+'\n')
   proc = subprocess.Popen('pwd', stdout=subprocess.PIPE,shell=True)
-  pwd= proc.stdout.read()
+  pwd = proc.stdout.read()
   pwd = pwd.strip()
   f = open(f_output,'w')
 
@@ -217,12 +283,12 @@ def writePBS():
   f.write('#PBS -o '+pwd+'\n')
   f.write('#PBS -d '+pwd+'\n')
   f.write('#PBS -W group_list='+allocation+'\n')
-  f.write('#PBS -q '+queue+'\n\n')
+  f.write('#PBS -q '+queue+'\n')
 
-  f.write('# load Gaussian environment\n')
-  f.write('module load contrib/'+version+'\n\n')
+  f.write('\n# load Gaussian environment\n')
+  f.write('module load contrib/'+version+'\n')
 
-  f.write('# debugging information\n')
+  f.write('\n# debugging information\n')
   f.write('HYAK_NPE=$(wc -l < $PBS_NODEFILE)\n') 
   f.write('HYAK_NNODES=$(uniq $PBS_NODEFILE | wc -l )\n')
   f.write('echo "**** Job Debugging Information ****"\n') 
@@ -234,15 +300,46 @@ def writePBS():
   f.write('ldd ./test\n') 
   f.write('echo "ENVIRONMENT VARIABLES"\n') 
   f.write('set\n') 
-  f.write('echo "**********************************************"\n\n') 
+  f.write('echo "**********************************************"\n') 
 
-  f.write('# run Gaussian\n')
+  if linda:
+    f.write('\n# add linda nodes\n')
+    f.write('HYAK_NNODES=$(uniq $PBS_NODEFILE | wc -l )\n')
+    f.write('nodes=()\n')
+    f.write('nodes+=(`uniq -c $PBS_NODEFILE | awk \'{print $2}\'`)\n')
+    f.write('for ((i=0; i<${#nodes[*]}-1; i++));\n')
+    f.write('do\n')
+    f.write('\tstring+=${nodes[$i]}\n')
+    f.write('\tstring+=","\n')
+    f.write('done\n')
+    f.write('string+=${nodes[$HYAK_NNODES-1]}\n')
+    f.write('sed -i -e "s/%LindaWorker.*/%LindaWorker=$string/Ig" '+gauss_input+'\n')
+
+    f.write('\n# check that the Linda nodes are correct\n')
+    f.write('lindaline=(`grep -i \'lindaworker\' '+gauss_input+'`)\n')
+    f.write('if [[ $lindaline == *$string ]]\n')
+    f.write('then\n')
+    f.write('\techo "Using the correct nodes for Linda"\n')
+    f.write('else\n')
+    f.write('\techo "Using the wrong nodes for Linda"\n')
+    f.write('\techo "Nodes assigned by scheduler = $string"\n')
+    f.write('\techo "Line in Gaussian input file = $lindaline"\n')
+    f.write('\texit 1\n')
+    f.write('fi\n')
+
+  if queue == 'bf':
+    f.write('\n# copy last log file to another name\n') 
+    f.write('num=`ls -l '+f_input[0]+'*.log | wc -l`\n')
+    f.write('let "num += 1"\n')
+    f.write('cp '+f_input[0]+'.log '+f_input[0]+'$num.log\n')
+
+  f.write('\n# run Gaussian\n')
   if 'gdv' in version: 
-    f.write('gdv '+str(f_input[0])+'.'+str(f_input[1])+'\n\n')
+    f.write('gdv '+gauss_input+'\n')
   else:
-    f.write('g09 '+str(f_input[0])+'.'+str(f_input[1])+'\n\n')
+    f.write('g09 '+gauss_input+'\n')
   
-  f.write('exit 0')
+  f.write('\nexit 0')
   print('Please run \'qsub '+f_output+'\' to submit to the scheduler\n')
 
 ##########################################################
@@ -251,5 +348,6 @@ def writePBS():
 if __name__ == '__main__':
 
   getInput()
+  checkInput()
   writePBS()
 
