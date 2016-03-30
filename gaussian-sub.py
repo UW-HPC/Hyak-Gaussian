@@ -121,36 +121,40 @@ def getInput():
 
   #--------------------------------------
   # determine which group's nodes to use (stf is default if available)
-  allocs= []
-  for group in groups:
-    if 'hyak-' in group and 'test' not in group: allocs.append(group)
-  if len(allocs) > 1:
-    print('Whose allocation would you like to use?')
-    for allocation in allocs:
-      print('['+allocation+']',end=' ') 
-      if 'hyak-stf' in allocation: print('- (default) ',end='')
-    print(': ',end='')
-    allocation = raw_input('')
-    if allocation == '' and 'hyak-stf' in allocs: allocation = 'hyak-stf'
-    if allocation not in allocs:
-      print('You must choose an allocation that you are a part of')
-      printHelp()
-      sys.exit()
-  else:
-    allocation = allocs
-  print('Submitting to the '+allocation+' allocation\n')
+  if queue == 'batch':
+    allocs= []
+    for group in groups:
+      if 'hyak-' in group and 'test' not in group: allocs.append(group)
+    if len(allocs) > 1:
+      print('Whose allocation would you like to use?')
+      for allocation in allocs:
+        print('['+allocation+']',end=' ') 
+        if 'hyak-stf' in allocation: print('- (default) ',end='')
+      print(': ',end='')
+      allocation = raw_input('')
+      if allocation == '' and 'hyak-stf' in allocs: allocation = 'hyak-stf'
+      if allocation not in allocs:
+        print('You must choose an allocation that you are a part of')
+        printHelp()
+        sys.exit()
+    else:
+      allocation = allocs
+    print('Submitting to the '+allocation+' allocation\n')
   #--------------------------------------
 
   #--------------------------------------
   # ask how many nodes to use
-  if allocation != 'hyak-stf':
-    print('Checking how many nodes are in this allocation...')
-    allocation_name = allocation.split('-')
-    command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-    max_nodes = int(proc.stdout.read())
+  if queue == 'batch':
+    if allocation != 'hyak-stf':
+      print('Checking how many nodes are in this allocation...')
+      allocation_name = allocation.split('-')
+      command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
+      proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+      max_nodes = int(proc.stdout.read())
+    else:
+      max_nodes = 54
   else:
-    max_nodes = 54
+    max_nodes = 1000
   n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
   if n_nodes == '': n_nodes = 1
   else: n_nodes = int(n_nodes)
@@ -167,26 +171,32 @@ def getInput():
  
   #--------------------------------------
   # ask how many cores on each node to use
-  if allocation != 'hyak-stf':
-    print('Checking what types of nodes are in this allocation...')
-    max_cores = []
-    command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-    max_16_cores= int(proc.stdout.read())
-    if max_16_cores != 0: smallest_node = 16 
-    command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-    max_12_cores= int(proc.stdout.read())
-    if max_12_cores != 0: smallest_node = 12 
-    command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
-    max_8_cores= int(proc.stdout.read())
-    if max_8_cores != 0: smallest_node = 8
+  if queue == 'batch':
+    if allocation != 'hyak-stf':
+      print('Checking what types of nodes are in this allocation...')
+      max_cores = []
+      command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
+      proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+      max_16_cores= int(proc.stdout.read())
+      if max_16_cores != 0: smallest_node = 16 
+      command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
+      proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+      max_12_cores= int(proc.stdout.read())
+      if max_12_cores != 0: smallest_node = 12 
+      command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
+      proc = subprocess.Popen(command, stdout=subprocess.PIPE,shell=True)
+      max_8_cores= int(proc.stdout.read())
+      if max_8_cores != 0: smallest_node = 8
+    else:
+      smallest_node = 16
+      max_8_cores   = 0
+      max_12_cores  = 0
+      max_16_cores  = 54
   else:
-    max_8_cores   = 0
-    max_12_cores  = 0
-    max_16_cores  = 54
-    smallest_node = 16
+    smallest_node = 8
+    max_8_cores   = 171
+    max_12_cores  = 257
+    max_16_cores  = 430
   n_cores = raw_input('How many cores do you want to use on each node? (default='+str(smallest_node)+') : ')
   if n_cores == '': n_cores = 0
   if int(n_cores) < smallest_node:
@@ -282,7 +292,7 @@ def writePBS():
   f.write('#PBS -j oe\n')
   f.write('#PBS -o '+pwd+'\n')
   f.write('#PBS -d '+pwd+'\n')
-  f.write('#PBS -W group_list='+allocation+'\n')
+  if queue == 'batch': f.write('#PBS -W group_list='+allocation+'\n')
   f.write('#PBS -q '+queue+'\n')
 
   f.write('\n# load Gaussian environment\n')
