@@ -244,13 +244,15 @@ def getInput():
 
   #--------------------------------------
   # check what the max walltime should be
-  time = raw_input('For how many hours do you want to run your calculation? (default=1) : ')
-  if time == '': time = int(1)
+  default = 1
+  if queue == 'bf': default = 5
+  time = raw_input('For how many hours do you want to run your calculation? (default='+str(default)+') : ')
+  if time == '': time = default
   else: time = int(time)
   if queue == 'bf' and time != 5:
     print('You generally want to specify 5 hrs when using the bf queue\n'
-         +'This is just a warning.\n')
-  print('Running the calculation for '+str(time)+' hr(s).\n')
+         +'This is just a warning.')
+  print('Running the calculation for '+str(time)+' hr(s)\n')
   #--------------------------------------
 
   #--------------------------------------
