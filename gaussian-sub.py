@@ -272,7 +272,16 @@ def printHelp():
        +'\tGaussian-Submit\n\n'
        +'DESCRIPTION\n'
        +'\tThis program will aid in the submission of Gaussian\n'
-       +'\tcalculations to the Hyak cluster.\n')
+       +'\tcalculations to the Hyak cluster. The script will ask\n'
+       +'\tquestions about the calculation to help set up the .pbs\n'
+       +'\tscript. It will check for the types of nodes available\n' 
+       +'\tto set appropriate defaults and it will read your input\n' 
+       +'\tfile to check for potential issues if using the STF\n'
+       +'\tallocation.\n\n'
+       +'EXAMPLES\n'
+       +'\tpython gaussian-sub.py input{.gjf,.com}\n\n'
+       +'AUTHOR\n'
+       +'\tPatrick J Lestrange <patricklestrange@gmail.com>\n') 
 
 ##########################################################
 
