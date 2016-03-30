@@ -18,4 +18,5 @@ allocation.
 Usage
 -----
 `python gaussian-sub.py input.com`
+
 `python gaussian-sub.py input.gjf`
