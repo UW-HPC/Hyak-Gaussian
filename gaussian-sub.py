@@ -1,3 +1,4 @@
+#!/usr/bin/python
 from __future__ import print_function
 import subprocess, sys, os
 
@@ -121,6 +122,7 @@ def getInput():
 
   #--------------------------------------
   # determine which group's nodes to use (stf is default if available)
+  allocation = ''
   if queue == 'batch':
     allocs= []
     for group in groups:
@@ -279,7 +281,7 @@ def printHelp():
        +'\tfile to check for potential issues if using the STF\n'
        +'\tallocation.\n\n'
        +'EXAMPLES\n'
-       +'\tpython gaussian-sub.py input{.gjf,.com}\n\n'
+       +'\tgaussian-sub.py input{.gjf,.com}\n\n'
        +'AUTHOR\n'
        +'\tPatrick J Lestrange <patricklestrange@gmail.com>\n') 
 
