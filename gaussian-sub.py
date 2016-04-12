@@ -18,6 +18,7 @@ def checkInput():
   contents = f.readlines()
   found_linda = False
   memory = 0
+  nproc  = 0
 
   for line in contents:
     if 'lindaworker' in line.lower(): found_linda = True 
@@ -63,6 +64,12 @@ def checkInput():
     print('\nYour input file does not contain %lindaworker, but\n'
          +'you have asked to use more than one node. Please add\n'
          +'this line or request only one node.\n')
+    sys.exit()
+  
+  if found_linda and n_nodes > 1:
+    print('\nYour input file contains %lindaworker, but you have\n'
+         +'only asked to use one node. Please remove this line or\n'
+         +'request more than one node.\n')
     sys.exit()
 
 ##########################################################
