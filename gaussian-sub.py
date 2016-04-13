@@ -66,7 +66,7 @@ def checkInput():
          +'this line or request only one node.\n')
     sys.exit()
   
-  if found_linda and n_nodes > 1:
+  if found_linda and n_nodes == 1:
     print('\nYour input file contains %lindaworker, but you have\n'
          +'only asked to use one node. Please remove this line or\n'
          +'request more than one node.\n')
