@@ -147,7 +147,7 @@ def getInput():
         printHelp()
         sys.exit()
     else:
-      allocation = str(allocs)
+      allocation = str(allocs[0])
     print('Submitting to the '+allocation+' allocation\n')
   #--------------------------------------
 
