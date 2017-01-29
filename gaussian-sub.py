@@ -17,96 +17,6 @@ import textwrap
 '''
 
 #----------------------------------------------------------------------------
-def check_input():
-    """Read the Gaussian input file and check for problems."""
-
-    gauss_input = str(f_input[0])+'.'+str(f_input[1])
-    f = open(gauss_input,'r')
-    contents = f.readlines()
-    found_linda = False
-    memory = 0
-    nproc  = 0
-    warnings = []
-    exit = False
-
-    for line in contents:
-        if 'lindaworker' in line.lower(): found_linda = True 
-        if 'mem' in line.lower():
-            mem_line = line.split('=')
-            mem_line[-1] = mem_line[-1].strip()
-            if 'gb' in mem_line[1].lower(): 
-                gb = True
-                mem = mem_line[1].lower().split('gb')
-                memory = int(mem[0])
-            else:
-                gb = False
-                warning = textwrap.dedent("""\
-                    This script only checks memory specfication if they
-                    are in Gb. Your calculation may still be fine, but 
-                    this script won't check. This is just a warning.""")
-                warnings.append(warning)
-        if 'nproc' in line.lower():
-            nproc_line = line.split('=')
-            nproc_line[-1] = nproc_line[-1].strip()
-            nproc = int(nproc_line[1])
-
-    if memory > 32 and gb and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            Generally you don't want to specify more than half
-            the memory on a node. You've asked for %dGb and
-            most STF nodes only have 64Gb.
-            This is just a warning.""" % memory)
-        warnings.append(warning)
-
-    if nproc > 16 and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            You should not specify to use more cores than the
-            number available on your node. The STF nodes have 16 cores
-            and you've asked for %d cores. Please lower the number 
-            of cores you've requested in your input file.
-            Not forming PBS script.""" % nproc)
-        warnings.append(warning)
-        exit = True
- 
-    if nproc < 16 and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            You usually want to use all the cores on a node. The
-            STF nodes have 16 cores and you've asked for %d cores.
-            There are some situations where you may want to use fewer
-            than the maximum number of cores, however, such as in the
-            case where you want to limit the memory requirements for
-            the calculation. This is just a warning.""" % nproc)
-        warnings.append(warning)
-
-    if linda and not found_linda:
-        warning = textwrap.dedent("""\
-            Your input file does not contain %lindaworker, but
-            you have asked to use more than one node. Please add this
-            line or request only one node. Not forming PBS script.""")
-        warnings.append(warning)
-        exit = True
-    
-    if found_linda and n_nodes == 1:
-        warning = textwrap.dedent("""\
-            Your input file contains %lindaworker, but you have
-            only asked to use one node. Please remove this line or
-            request more than one node. Not forming PBS script.""")
-        warnings.append(warning)
-        exit = True
-
-    # Print warnings and exit if there are too many errors.
-    if len(warnings) > 0:
-      print('\n'+'#'*40+'\n'
-           +' '*15+'WARNINGS\n'
-           +'#'*40)
-    for warning in warnings:
-        print('\n'+textwrap.fill(warning, 60))
-    if exit:
-      print("\nExiting without writing PBS file.\n")
-      sys.exit()
-#----------------------------------------------------------------------------
-
-#----------------------------------------------------------------------------
 def get_input():
     """Grab input from the user about what type of job to run."""
 
@@ -328,28 +238,94 @@ def get_input():
     if f_output == '': f_output = f_input[0]+'.pbs'
     else: f_output = f_output+'.pbs'
     #--------------------------------------
+
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
-def print_help():
-    """Print a description of the script for the user."""
+def check_input():
+    """Read the Gaussian input file and check for problems."""
+
+    gauss_input = str(f_input[0])+'.'+str(f_input[1])
+    f = open(gauss_input,'r')
+    contents = f.readlines()
+    found_linda = False
+    memory = 0
+    nproc  = 0
+    warnings = []
+    exit = False
+
+    for line in contents:
+        if 'lindaworker' in line.lower(): found_linda = True 
+        if 'mem' in line.lower():
+            mem_line = line.split('=')
+            mem_line[-1] = mem_line[-1].strip()
+            if 'gb' in mem_line[1].lower(): 
+                gb = True
+                mem = mem_line[1].lower().split('gb')
+                memory = int(mem[0])
+            else:
+                gb = False
+                warning = textwrap.dedent("""\
+                    This script only checks the memory specfication if it 
+                    is in Gb. Your calculation may still be fine, but 
+                    this script won't check. This is just a warning.""")
+                warnings.append(warning)
+        if 'nproc' in line.lower():
+            nproc_line = line.split('=')
+            nproc_line[-1] = nproc_line[-1].strip()
+            nproc = int(nproc_line[1])
+
+    if memory > 32 and gb and allocation == 'hyak-stf':
+        warning = textwrap.dedent("""\
+            Generally you don't want to specify more than half the
+            memory on a node. You've asked for %dGb and most STF 
+            nodes only have 64Gb.
+            This is just a warning.""" % memory)
+        warnings.append(warning)
+
+    if nproc > 16 and allocation == 'hyak-stf':
+        warning = textwrap.dedent("""\
+            You should not specify to use more cores than the number
+            available on your node. The STF nodes have 16 cores
+            and you've asked for %d cores. Please lower the number 
+            of cores you've requested in your input file.
+            Not forming PBS script.""" % nproc)
+        warnings.append(warning)
+        exit = True
  
-    print(textwrap.dedent("""\
-        NAME
-           \tGaussian-Submit
-        DESCRIPTION
-          \tThis program will help submit Gaussian calculations to
-          \tthe Hyak Ikt cluster. The script will ask questions about
-          \tthe calculation to help set up the .pbs script.
+    if nproc < 16 and allocation == 'hyak-stf':
+        warning = textwrap.dedent("""\
+            You usually want to use all the cores on a node. The
+            STF nodes have 16 cores and you've asked for %d cores.
+            This is just a warning.""" % nproc)
+        warnings.append(warning)
 
-          \tIt will check for the types of nodes available
-          \tto set appropriate defaults. It will also read your input
-          \tfile to check for potential issues if using the STF
-          \tallocation.
-        EXAMPLES
-          \tpython gaussian-sub.py input{.gjf,.com}
-        AUTHOR
-          \tPatrick J. Lestrange <patricklestrange@gmail.com>"""))
+    if linda and not found_linda:
+        warning = textwrap.dedent("""\
+            Your input file does not contain %lindaworker, but
+            you have asked to use more than one node. Please add this
+            line or request only one node. Not forming PBS script.""")
+        warnings.append(warning)
+        exit = True
+    
+    if found_linda and n_nodes == 1:
+        warning = textwrap.dedent("""\
+            Your input file contains %lindaworker, but you have
+            only asked to use one node. Please remove this line or
+            request more than one node. Not forming PBS script.""")
+        warnings.append(warning)
+        exit = True
+
+    # Print warnings and exit if there are too many errors.
+    if len(warnings) > 0:
+      print('\n'+'#'*40+'\n'
+           +' '*15+'WARNINGS\n'
+           +'#'*40)
+    for warning in warnings:
+        print('\n'+textwrap.fill(warning, 60))
+    if exit:
+      print("\nExiting without writing PBS file.\n")
+      sys.exit()
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
@@ -446,12 +422,33 @@ def write_PBS():
 
         exit 0 """ % (command, gauss_input)))
 
-    print('Please run \'qsub '+f_output+'\' to submit to the scheduler\n')
+    print("""Please run 'qsub %s' to submit to the scheduler\n""" % f_output)
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+def print_help():
+    """Print a description of the script for the user."""
+ 
+    print(textwrap.dedent("""\
+        NAME
+           \tGaussian-Submit
+        DESCRIPTION
+          \tThis program will help submit Gaussian calculations to
+          \tthe Hyak Ikt cluster. The script will ask questions about
+          \tthe calculation to help set up the .pbs script.
+
+          \tIt will check for the types of nodes available
+          \tto set appropriate defaults. It will also read your input
+          \tfile to check for potential issues if using the STF
+          \tallocation.
+        EXAMPLES
+          \tpython gaussian-sub.py input{.gjf,.com}
+        AUTHOR
+          \tPatrick J. Lestrange <patricklestrange@gmail.com>"""))
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
 if __name__ == '__main__':
-
     get_input()
     check_input()
     write_PBS()
