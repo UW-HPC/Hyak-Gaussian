@@ -411,8 +411,8 @@ def write_PBS():
 
     if 'gdv' in version: 
         command = 'gdv'
-    elif 'g19' in version:
-        command = 'g19'
+    elif 'g16' in version:
+        command = 'g16'
     else:
         command = 'g09'
     f.write(textwrap.dedent("""\
