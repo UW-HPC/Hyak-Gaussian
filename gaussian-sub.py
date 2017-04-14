@@ -5,6 +5,7 @@ import sys
 import os
 import re
 import subprocess
+#from subprocess import check_output
 import textwrap
 
 '''
@@ -27,10 +28,9 @@ def get_user_input():
 
     #--------------------------------------
     # Determine which generation machine we're on
-    gen = 'ikt'
-    command = 'hostname'
-    proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-    if 'mox' in proc.stdout.read(): gen = 'mox'
+    gen  = 'ikt'
+    host = subprocess.check_output('hostname',shell=True)
+    if 'mox' in host: gen = 'mox'
     #--------------------------------------
 
     #--------------------------------------
@@ -61,13 +61,13 @@ def get_user_input():
 
     #--------------------------------------
     # Check that the user has the right permissions to use Gaussian.
-    proc = subprocess.Popen('groups', stdout=subprocess.PIPE)
-    groups = proc.stdout.read().split(' ')
+    username = subprocess.check_output('whoami',shell=True)
+    groups = subprocess.check_output('groups '+username,shell=True).split(' ')
     groups[-1] = groups[-1].strip()
     if 'ligroup-gaussian' not in groups: 
         print(textwrap.fill(textwrap.dedent("""\
             ERROR: You must be part of the ligroup-gaussian Unix group 
-            to use Gaussian.  Contact Prof. Xiaosong Li (xsli@uw.edu) to 
+            to use Gaussian. Contact Prof. Xiaosong Li (xsli@uw.edu) to 
             be added to the group."""), 60))
         sys.exit()
     if 'ligroup-gdv' in groups: gdv = True
@@ -118,10 +118,18 @@ def get_user_input():
         if allocation != 'hyak-stf':
             print('Checking how many nodes are in this allocation...')
             allocation_name = allocation.split('-')
-            command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-            max_nodes = int(proc.stdout.read())
-        else:
+            if gen == 'ikt':
+                command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
+                #TODO: test max_nodes command on ikt
+#               proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+#               max_nodes = int(proc.stdout.read())
+                max_nodes = int(subprocess.check_output(command,shell=True))
+            elif gen == 'mox':
+                command = 'hyakalloc | grep '+allocation_name[1]
+                specs = subprocess.check_output(command,shell=True).split()
+                max_nodes = int(specs[1])
+                smallest_mem = int(specs[2][:-1])
+        else: # STF allocation
             if   gen == 'ikt': max_nodes = 54
             elif gen == 'mox': max_nodes = 40
     else:
@@ -143,24 +151,29 @@ def get_user_input():
  
     #--------------------------------------
     # Ask how many cores/memory on each node to use.
+    #TODO: test new subprocess commands on ikt
     if queue == 'batch':
         if allocation != 'hyak-stf':
             print('Checking what types of nodes are in this allocation...')
             command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
-            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-            max_28_cores = int(proc.stdout.read())
+#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+#           max_28_cores = int(proc.stdout.read())
+            max_28_cores = int(subprocess.check_output(command,shell=True))
             if max_28_cores != 0: smallest_node = 28 
             command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-            max_16_cores = int(proc.stdout.read())
+#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+#           max_16_cores = int(proc.stdout.read())
+            max_16_cores = int(subprocess.check_output(command,shell=True))
             if max_16_cores != 0: smallest_node = 16 
             command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-            max_12_cores = int(proc.stdout.read())
+#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+#           max_12_cores = int(proc.stdout.read())
+            max_12_cores = int(subprocess.check_output(command,shell=True))
             if max_12_cores != 0: smallest_node = 12 
             command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-            max_8_cores = int(proc.stdout.read())
+#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+#           max_8_cores = int(proc.stdout.read())
+            max_8_cores = int(subprocess.check_output(command,shell=True))
             if max_8_cores != 0: smallest_node = 8
         else:
             if gen == 'ikt':
@@ -208,6 +221,7 @@ def get_user_input():
     if too_much:
         print('You requested too many nodes with '+n_cores+' cores'
              +'Resetting to maximum number of nodes with that many cores')
+    #TODO: change the memory check to work on both ikt and mox
     smallest_mem = 128
     memory = raw_input(textwrap.fill(textwrap.dedent("""\
               How much memory do you want to use 
@@ -318,30 +332,55 @@ def check_Gaussian_input():
             nproc_line[-1] = nproc_line[-1].strip()
             nproc = int(nproc_line[1])
 
-    if memory > 32 and gb and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            Generally you don't want to specify more than half the
-            memory on a node. You've asked for %dGb and most STF 
-            nodes only have 64Gb.
-            This is just a warning.""" % memory)
-        warnings.append(warning)
+    if gb and allocation == 'hyak-stf':
+        if gen == 'ikt' and memory > 32:
+            warning = textwrap.dedent("""\
+                Generally you don't want to specify more than half the
+                memory on a node. You've asked for %dGb and most STF
+                nodes only have 64Gb.
+                This is just a warning.""" % memory)
+            warnings.append(warning)
+        elif gen == 'mox' and memory > 64:
+            warning = textwrap.dedent("""\
+                Generally you don't want to specify more than half the
+                memory on a node. You've asked for %dGb and most STF
+                nodes only have 128Gb.
+                This is just a warning.""" % memory)
+            warnings.append(warning)
 
-    if nproc > 16 and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            You should not specify to use more cores than the number
-            available on your node. The STF nodes have 16 cores
-            and you've asked for %d cores. Please lower the number 
-            of cores you've requested in your input file.
-            Not forming PBS script.""" % nproc)
-        warnings.append(warning)
-        exit = True
+    if allocation == 'hyak-stf':
+        if gen == 'ikt' and nproc > 16:
+            warning = textwrap.dedent("""\
+                You should not specify to use more cores than the number
+                available on your node. The STF nodes have 16 cores
+                and you've asked for %d cores. Please lower the number 
+                of cores you've requested in your input file.
+                Not forming PBS script.""" % nproc)
+            warnings.append(warning)
+            exit = True
+        elif gen == 'mox' and nproc > 28:
+            warning = textwrap.dedent("""\
+                You should not specify to use more cores than the number
+                available on your node. The STF nodes have 28 cores
+                and you've asked for %d cores. Please lower the number 
+                of cores you've requested in your input file.
+                Not forming SBATCH script.""" % nproc)
+            warnings.append(warning)
+            exit = True
  
-    if nproc < 16 and allocation == 'hyak-stf':
-        warning = textwrap.dedent("""\
-            You usually want to use all the cores on a node. The
-            STF nodes have 16 cores and you've asked for %d cores.
-            This is just a warning.""" % nproc)
-        warnings.append(warning)
+    if allocation == 'hyak-stf':
+        if gen == 'ikt' and nproc < 16:
+            warning = textwrap.dedent("""\
+                You usually want to use all the cores on a node. The
+                STF nodes have 16 cores and you've asked for %d cores.
+                This is just a warning.""" % nproc)
+            warnings.append(warning)
+        elif gen == 'mox' and nproc < 28:
+            warning = textwrap.dedent("""\
+                You usually want to use all the cores on a node. The
+                STF nodes have 28 cores and you've asked for %d cores.
+                This is just a warning.""" % nproc)
+            warnings.append(warning)
 
     if linda and not found_linda:
         warning = textwrap.dedent("""\
@@ -377,8 +416,7 @@ def write_Ikt_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    proc = subprocess.Popen('pwd', stdout=subprocess.PIPE,shell=True)
-    pwd = proc.stdout.read().strip()
+    pwd = subprocess.check_output('pwd',shell=True).strip()
     f = open(f_output,'w')
 
     f.write(textwrap.dedent("""\
@@ -474,9 +512,10 @@ def write_Mox_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    proc = subprocess.Popen('pwd', stdout=subprocess.PIPE,shell=True)
-    pwd = proc.stdout.read().strip()
+    pwd = subprocess.check_output('pwd',shell=True).strip()
     f = open(f_output,'w')
+    alloc_name = re.split('-',allocation)
+    short_name = alloc_name[1]
 
     f.write(textwrap.dedent("""\
         #!/bin/bash
@@ -485,13 +524,13 @@ def write_Mox_script():
         #SBATCH --time=%d:00:00
         #SBATCH --mem=%dG
         #SBATCH --workdir=%s
-        #SBATCH --patition=%s
+        #SBATCH --partition=%s
         #SBATCH --account=%s\n\n""" 
-        % (f_input[0], n_nodes, time, memory, pwd, allocation, allocation))) 
+        % (f_input[0], n_nodes, time, memory, pwd, short_name, short_name))) 
     f.write(textwrap.dedent("""\
         # load Gaussian environment
         module load contrib/%s"""
-        % queue))
+        % version))
 
 #   if linda:
 #       f.write(textwrap.dedent("""\
