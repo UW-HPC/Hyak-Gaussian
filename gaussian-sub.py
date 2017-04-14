@@ -3,26 +3,35 @@
 from __future__ import print_function
 import sys
 import os
+import re
 import subprocess
 import textwrap
 
 '''
   Patrick J. Lestrange 2017
         
-  gaussian-sub.py: Builds a PBS submission script to
-                   run Gaussian on the Hyak Ikt cluster.
+  gaussian-sub.py: Builds a PBS submission script to run
+                   Gaussian on the Hyak Ikt/Mox clusters.
 
                    Also used as a teaching aid in UW's
                    CHEM 465/565 Computations in Chemistry.
 '''
 
 #----------------------------------------------------------------------------
-def get_input():
+def get_user_input():
     """Grab input from the user about what type of job to run."""
 
     global f_input, gdv, queue, allocation, version, n_nodes
-    global linda, n_cores, time, f_output
+    global linda, n_cores, time, f_output, gen, memory
     gdv = False
+
+    #--------------------------------------
+    # Determine which generation machine we're on
+    gen = 'ikt'
+    command = 'hostname'
+    proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+    if 'mox' in proc.stdout.read(): gen = 'mox'
+    #--------------------------------------
 
     #--------------------------------------
     # There should only be one argument: the Gaussian input file.
@@ -37,7 +46,7 @@ def get_input():
     #--------------------------------------
 
     #--------------------------------------
-    # Check that the file is a .com or .gjf and that it exists.
+    # Check that the argument is a .com or .gjf and that it exists.
     f_input= sys.argv[1].split('.')
     if not os.path.isfile(sys.argv[1]):
         print('ERROR: The input file '+sys.argv[1]+' does not exist')
@@ -65,6 +74,7 @@ def get_input():
     #--------------------------------------
 
     #--------------------------------------
+    ## TODO: CHANGE THIS FOR MOX: BF IS CALLED SOMETHING ELSE
     # Determine which queue to submit to.
     queue = raw_input(textwrap.fill(textwrap.dedent("""\
             Which queue would you like to submit to?
@@ -112,7 +122,8 @@ def get_input():
             proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
             max_nodes = int(proc.stdout.read())
         else:
-            max_nodes = 54
+            if   gen == 'ikt': max_nodes = 54
+            elif gen == 'mox': max_nodes = 40
     else:
         max_nodes = 1000
     n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
@@ -131,11 +142,14 @@ def get_input():
     #--------------------------------------
  
     #--------------------------------------
-    # Ask how many cores on each node to use.
+    # Ask how many cores/memory on each node to use.
     if queue == 'batch':
         if allocation != 'hyak-stf':
             print('Checking what types of nodes are in this allocation...')
-            max_cores = []
+            command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
+            proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
+            max_28_cores = int(proc.stdout.read())
+            if max_28_cores != 0: smallest_node = 28 
             command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
             proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
             max_16_cores = int(proc.stdout.read())
@@ -149,15 +163,30 @@ def get_input():
             max_8_cores = int(proc.stdout.read())
             if max_8_cores != 0: smallest_node = 8
         else:
-            smallest_node = 16
+            if gen == 'ikt':
+                smallest_node = 16
+                max_8_cores   = 0
+                max_12_cores  = 0
+                max_16_cores  = 54
+            elif gen == 'mox':
+                smallest_node = 28
+                max_8_cores   = 0
+                max_12_cores  = 0
+                max_16_cores  = 0
+                max_28_cores  = 40
+    else:
+        if gen == 'ikt':
+            smallest_node = 8
+            max_8_cores   = 171
+            max_12_cores  = 257
+            max_16_cores  = 430
+            max_28_cores  = 0
+        elif gen == 'mox':
+            smallest_node = 28
             max_8_cores   = 0
             max_12_cores  = 0
-            max_16_cores  = 54
-    else:
-        smallest_node = 8
-        max_8_cores   = 171
-        max_12_cores  = 257
-        max_16_cores  = 430
+            max_16_cores  = 0
+            max_28_cores  = 208
     n_cores = raw_input(textwrap.fill(textwrap.dedent("""\
               How many cores do you want to use 
               on each node? (default=%d) : """ % smallest_node).strip()))
@@ -179,14 +208,25 @@ def get_input():
     if too_much:
         print('You requested too many nodes with '+n_cores+' cores'
              +'Resetting to maximum number of nodes with that many cores')
-    print('Using %d node(s) with %d cores\n' % (n_nodes, n_cores))
+    smallest_mem = 128
+    memory = raw_input(textwrap.fill(textwrap.dedent("""\
+              How much memory do you want to use 
+              on each node? (default=%dGb) : """ % smallest_mem).strip()))
+    if memory == '': memory = smallest_mem
+    print('Using %d node(s) with %d cores and %d Gb\n' % 
+        (n_nodes, n_cores,memory))
     #--------------------------------------
 
     #--------------------------------------
     # Determine which version of Gaussian to use.
-    g09_versions = ['d01','e01']
-    g16_versions = ['a03']
-    gdv_versions = ['i03','i03p','i04p','i06','i06p','i09']
+    if gen == 'ikt':
+        g09_versions = ['d01','e01']
+        g16_versions = ['a03']
+        gdv_versions = ['i03','i03p','i04p','i06','i06p','i09']
+    elif gen == 'mox':
+        g09_versions = []
+        g16_versions = ['a03']
+        gdv_versions = ['i03p','i04p','i06p','i10pp']
     print('Which version of Gaussian would you like to use?')
     for version in g09_versions: print('[g09.'+version+']',end=' ') 
     for version in g16_versions: print('[g16.'+version+']',end=' ') 
@@ -232,17 +272,20 @@ def get_input():
 
     #--------------------------------------
     # Get a name for the .pbs script.
+    extension = 'pbs'
+    if gen == 'mox': extension = 'sh'
     f_output = raw_input(textwrap.fill(textwrap.dedent("""\
-               What should the .pbs script be named? 
-               (default=%s.pbs) : """ % f_input[0]).strip()))
-    if f_output == '': f_output = f_input[0]+'.pbs'
-    else: f_output = f_output+'.pbs'
+               What should the .%s script be named? 
+               (default=%s.%s) : """ % ( extension, f_input[0].strip(), 
+                                         extension) )))
+    if f_output == '': f_output = f_input[0]+'.'+extension
+    else: f_output = f_output+'.'+extension
     #--------------------------------------
 
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
-def check_input():
+def check_Gaussian_input():
     """Read the Gaussian input file and check for problems."""
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
@@ -329,7 +372,7 @@ def check_input():
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
-def write_PBS():
+def write_Ikt_script():
     """Make a .pbs script based on user specifications."""
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
@@ -426,6 +469,82 @@ def write_PBS():
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
+def write_Mox_script():
+    """Make a .sh script based on user specifications."""
+
+    gauss_input = str(f_input[0])+'.'+str(f_input[1])
+    print('Writing to '+f_output+'\n')
+    proc = subprocess.Popen('pwd', stdout=subprocess.PIPE,shell=True)
+    pwd = proc.stdout.read().strip()
+    f = open(f_output,'w')
+
+    f.write(textwrap.dedent("""\
+        #!/bin/bash
+        #SBATCH --job-name=%s
+        #SBATCH --nodes=%d 
+        #SBATCH --time=%d:00:00
+        #SBATCH --mem=%dG
+        #SBATCH --workdir=%s
+        #SBATCH --patition=%s
+        #SBATCH --account=%s\n\n""" 
+        % (f_input[0], n_nodes, time, memory, pwd, allocation, allocation))) 
+    f.write(textwrap.dedent("""\
+        # load Gaussian environment
+        module load contrib/%s"""
+        % queue))
+
+#   if linda:
+#       f.write(textwrap.dedent("""\
+#           \n
+#           # add linda nodes
+#           HYAK_NNODES=$(uniq $PBS_NODEFILE | wc -l )
+#           nodes=()
+#           nodes+=(`uniq -c $PBS_NODEFILE | awk '{print $2}'`)
+#           for ((i=0; i<${#nodes[*]}-1; i++));
+#           do
+#           \tstring+=${nodes[$i]}
+#           \tstring+=","
+#           done 
+#           string+=${nodes[$HYAK_NNODES-1]}
+#           sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" %s
+
+#           # check that the Linda nodes are correct
+#           lindaline=(`grep -i 'lindaworker' %s`)
+#           if [[ $lindaline == *$string ]]
+#           then
+#           \techo "Using the correct nodes for Linda"
+#           else
+#           \techo "Using the wrong nodes for Linda"
+#           \techo "Nodes assigned by scheduler = $string"
+#           \techo "Line in Gaussian input file = $lindaline"
+#           \texit 1
+#           fi """ % (gauss_input, gauss_input)))
+
+#   if queue == 'bf':
+#       f.write(textwrap.dedent("""\
+#         \n
+#         # copy last log file to another name
+#         num=`ls -l %s*.log | wc -l`
+#         let "num += 1"
+#         cp %s.log %s$num.log""" % (f_input[0], f_input[0], f_input[0])))
+
+    if 'gdv' in version: 
+        command = 'gdv'
+    elif 'g16' in version:
+        command = 'g16'
+    else:
+        command = 'g09'
+    f.write(textwrap.dedent("""\
+        \n
+        # run Gaussian
+        %s %s 
+
+        exit 0 """ % (command, gauss_input)))
+
+    print("""Please run 'sbatch %s' to submit to the scheduler\n""" % f_output)
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
 def print_help():
     """Print a description of the script for the user."""
  
@@ -434,11 +553,11 @@ def print_help():
            \tGaussian-Submit
         DESCRIPTION
           \tThis program will help submit Gaussian calculations to
-          \tthe Hyak Ikt cluster. The script will ask questions about
-          \tthe calculation to help set up the .pbs script.
+          \tthe Hyak Ikt and Mox clusters. The script will ask questions 
+          \tabout the calculation to help set up the .pbs/.sh script.
 
-          \tIt will check for the types of nodes available
-          \tto set appropriate defaults. It will also read your input
+          \tIt will check for the types of nodes available to
+          \tset appropriate defaults. It will also read your input
           \tfile to check for potential issues if using the STF
           \tallocation.
         EXAMPLES
@@ -449,7 +568,8 @@ def print_help():
 
 #----------------------------------------------------------------------------
 if __name__ == '__main__':
-    get_input()
-    check_input()
-    write_PBS()
+    get_user_input()
+    check_Gaussian_input()
+    if   gen == 'ikt': write_Ikt_script()
+    elif gen == 'mox': write_Mox_script()
 #----------------------------------------------------------------------------
