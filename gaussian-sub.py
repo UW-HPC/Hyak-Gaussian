@@ -4,9 +4,12 @@ from __future__ import print_function
 import sys
 import os
 import re
-import subprocess
-#from subprocess import check_output
 import textwrap
+try:
+    from subprocess import check_output
+except ImportError:
+    print('\nERROR: Must load at least anaconda_2.3 environment on Ikt\n')
+    sys.exit()
 
 '''
   Patrick J. Lestrange 2017
@@ -29,7 +32,7 @@ def get_user_input():
     #--------------------------------------
     # Determine which generation machine we're on
     gen  = 'ikt'
-    host = subprocess.check_output('hostname',shell=True)
+    host = check_output('hostname',shell=True)
     if 'mox' in host: gen = 'mox'
     #--------------------------------------
 
@@ -61,8 +64,8 @@ def get_user_input():
 
     #--------------------------------------
     # Check that the user has the right permissions to use Gaussian.
-    username = subprocess.check_output('whoami',shell=True)
-    groups = subprocess.check_output('groups '+username,shell=True).split(' ')
+    username = check_output('whoami',shell=True)
+    groups = check_output('groups '+username,shell=True).split(' ')
     groups[-1] = groups[-1].strip()
     if 'ligroup-gaussian' not in groups: 
         print(textwrap.fill(textwrap.dedent("""\
@@ -74,14 +77,15 @@ def get_user_input():
     #--------------------------------------
 
     #--------------------------------------
-    ## TODO: CHANGE THIS FOR MOX: BF IS CALLED SOMETHING ELSE
     # Determine which queue to submit to.
     queue = raw_input(textwrap.fill(textwrap.dedent("""\
             Which queue would you like to submit to?
-            [batch] - (default) or [bf] : """),100))
+            [batch] - (default) or [bf|ckpt] : """),100))
     if queue == '': queue = 'batch'
-    if queue != 'batch' and queue != 'bf':
-        print('ERROR: Invalid option for a queue. Must be batch or bf')
+    if queue == 'bf' and gen == 'mox': queue = 'ckpt'
+    if queue == 'ckpt' and gen == 'ikt': queue = 'bf'
+    if queue != 'batch' and queue != 'bf' and queue != 'ckpt':
+        print('ERROR: Invalid option for a queue. Must be batch, bf, or ckpt')
         sys.exit()
     print('Using the '+queue+' queue\n')
     #--------------------------------------
@@ -89,7 +93,7 @@ def get_user_input():
     #--------------------------------------
     # Determine which group's nodes to use. STF is the default if available.
     allocation = ''
-    if queue == 'batch':
+    if queue == 'batch' or queue == 'ckpt':
         allocs= []
         for group in groups:
             if 'hyak-' in group and 'test' not in group: allocs.append(group)
@@ -120,13 +124,10 @@ def get_user_input():
             allocation_name = allocation.split('-')
             if gen == 'ikt':
                 command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-                #TODO: test max_nodes command on ikt
-#               proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-#               max_nodes = int(proc.stdout.read())
-                max_nodes = int(subprocess.check_output(command,shell=True))
+                max_nodes = int(check_output(command,shell=True))
             elif gen == 'mox':
                 command = 'hyakalloc | grep '+allocation_name[1]
-                specs = subprocess.check_output(command,shell=True).split()
+                specs = check_output(command,shell=True).split()
                 max_nodes = int(specs[1])
                 smallest_mem = int(specs[2][:-1])
         else: # STF allocation
@@ -137,9 +138,13 @@ def get_user_input():
     n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
     if n_nodes == '': n_nodes = 1
     else: n_nodes = int(n_nodes)
-    if n_nodes < 1 or n_nodes >= max_nodes:
+    if max_nodes == 0:
         print(textwrap.fill(textwrap.dedent("""\
-            ERROR: You must select at least one node and 
+            ERROR: There are no nodes available for this allocation"""),100))
+        sys.exit()
+    elif n_nodes < 1 or n_nodes >= max_nodes:
+        print(textwrap.fill(textwrap.dedent("""\
+            ERROR: You must select at least one node and
             less than %d""" % max_nodes),100))
         sys.exit()
     if n_nodes > 1: linda = True
@@ -151,30 +156,30 @@ def get_user_input():
  
     #--------------------------------------
     # Ask how many cores/memory on each node to use.
-    #TODO: test new subprocess commands on ikt
     if queue == 'batch':
         if allocation != 'hyak-stf':
             print('Checking what types of nodes are in this allocation...')
-            command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
-#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-#           max_28_cores = int(proc.stdout.read())
-            max_28_cores = int(subprocess.check_output(command,shell=True))
-            if max_28_cores != 0: smallest_node = 28 
-            command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-#           max_16_cores = int(proc.stdout.read())
-            max_16_cores = int(subprocess.check_output(command,shell=True))
-            if max_16_cores != 0: smallest_node = 16 
-            command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-#           max_12_cores = int(proc.stdout.read())
-            max_12_cores = int(subprocess.check_output(command,shell=True))
-            if max_12_cores != 0: smallest_node = 12 
-            command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-#           proc = subprocess.Popen(command,stdout=subprocess.PIPE,shell=True)
-#           max_8_cores = int(proc.stdout.read())
-            max_8_cores = int(subprocess.check_output(command,shell=True))
-            if max_8_cores != 0: smallest_node = 8
+            if gen == 'ikt':
+                command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
+                max_28_cores = int(check_output(command,shell=True))
+                if max_28_cores != 0: smallest_node = 28 
+                command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
+                max_16_cores = int(check_output(command,shell=True))
+                if max_16_cores != 0: smallest_node = 16 
+                command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
+                max_12_cores = int(check_output(command,shell=True))
+                if max_12_cores != 0: smallest_node = 12 
+                command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
+                max_8_cores = int(check_output(command,shell=True))
+                if max_8_cores != 0: smallest_node = 8
+            elif gen == 'mox':
+                command = 'hyakalloc '+allocation_name[1]
+                specs = check_output(command,shell=True).split()
+                smallest_node = 28
+                max_8_cores   = 0
+                max_12_cores  = 0
+                max_16_cores  = 0
+                max_28_cores  = int(specs[11])
         else:
             if gen == 'ikt':
                 smallest_node = 16
@@ -201,7 +206,7 @@ def get_user_input():
             max_16_cores  = 0
             max_28_cores  = 208
     n_cores = raw_input(textwrap.fill(textwrap.dedent("""\
-              How many cores do you want to use 
+              How many cores do you want to use
               on each node? (default=%d) : """ % smallest_node).strip()))
     if n_cores == '': n_cores = 0
     if int(n_cores) < smallest_node:
@@ -221,14 +226,18 @@ def get_user_input():
     if too_much:
         print('You requested too many nodes with '+n_cores+' cores'
              +'Resetting to maximum number of nodes with that many cores')
-    #TODO: change the memory check to work on both ikt and mox
-    smallest_mem = 128
-    memory = raw_input(textwrap.fill(textwrap.dedent("""\
-              How much memory do you want to use 
-              on each node? (default=%dGb) : """ % smallest_mem).strip()))
-    if memory == '': memory = smallest_mem
-    print('Using %d node(s) with %d cores and %d Gb\n' % 
-        (n_nodes, n_cores,memory))
+
+    if gen == 'ikt':
+        print('Using %d node(s) with %d cores\n' % 
+            (n_nodes, n_cores))
+    elif gen == 'mox':
+        smallest_mem = 128
+        memory = raw_input(textwrap.fill(textwrap.dedent("""\
+                  How much memory do you want to use
+                  on each node? (default=%dGb) : """ % smallest_mem).strip()))
+        if memory == '': memory = smallest_mem
+        print('Using %d node(s) with %d cores and %d Gb\n' % 
+            (n_nodes, n_cores, memory))
     #--------------------------------------
 
     #--------------------------------------
@@ -262,7 +271,7 @@ def get_user_input():
 
     #--------------------------------------
     # Check what the max walltime should be.
-    if queue != 'bf':
+    if queue != 'bf' and queue != 'ckpt':
         default = 1
         unit    = 'hr'
         time = raw_input(textwrap.fill(textwrap.dedent("""\
@@ -416,7 +425,7 @@ def write_Ikt_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    pwd = subprocess.check_output('pwd',shell=True).strip()
+    pwd = check_output('pwd',shell=True).strip()
     f = open(f_output,'w')
 
     f.write(textwrap.dedent("""\
@@ -512,10 +521,13 @@ def write_Mox_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    pwd = subprocess.check_output('pwd',shell=True).strip()
+    pwd = check_output('pwd',shell=True).strip()
     f = open(f_output,'w')
-    alloc_name = re.split('-',allocation)
-    short_name = alloc_name[1]
+    short_name = re.split('-',allocation)[1]
+    partition, account = short_name, short_name
+    if queue == 'bf' or queue == 'ckpt':
+        partition = queue
+        account = short_name+'-ckpt'
 
     f.write(textwrap.dedent("""\
         #!/bin/bash
@@ -526,46 +538,53 @@ def write_Mox_script():
         #SBATCH --workdir=%s
         #SBATCH --partition=%s
         #SBATCH --account=%s\n\n""" 
-        % (f_input[0], n_nodes, time, memory, pwd, short_name, short_name))) 
+        % (f_input[0], n_nodes, time, memory, pwd, partition, account))) 
     f.write(textwrap.dedent("""\
         # load Gaussian environment
-        module load contrib/%s"""
+        module load contrib/%s
+
+        # debugging information
+        echo "**** Job Debugging Information ****"
+        echo "This job will run on $SLURM_JOB_NODELIST"
+        echo ""
+        echo "ENVIRONMENT VARIABLES"
+        set
+        echo "**********************************************" """ 
         % version))
 
-#   if linda:
-#       f.write(textwrap.dedent("""\
-#           \n
-#           # add linda nodes
-#           HYAK_NNODES=$(uniq $PBS_NODEFILE | wc -l )
-#           nodes=()
-#           nodes+=(`uniq -c $PBS_NODEFILE | awk '{print $2}'`)
-#           for ((i=0; i<${#nodes[*]}-1; i++));
-#           do
-#           \tstring+=${nodes[$i]}
-#           \tstring+=","
-#           done 
-#           string+=${nodes[$HYAK_NNODES-1]}
-#           sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" %s
+    if linda:
+        f.write(textwrap.dedent("""\
+            \n
+            # add linda nodes
+            nodes=()
+            nodes+=(`scontrol show hostnames $SLURM_JOB_NODELIST `)
+            for ((i=0; i<${#nodes[*]}-1; i++));
+            do
+            \tstring+=${nodes[$i]}
+            \tstring+=","
+            done 
+            string+=${nodes[$SLURM_NNODES-1]}
+            sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" %s
 
-#           # check that the Linda nodes are correct
-#           lindaline=(`grep -i 'lindaworker' %s`)
-#           if [[ $lindaline == *$string ]]
-#           then
-#           \techo "Using the correct nodes for Linda"
-#           else
-#           \techo "Using the wrong nodes for Linda"
-#           \techo "Nodes assigned by scheduler = $string"
-#           \techo "Line in Gaussian input file = $lindaline"
-#           \texit 1
-#           fi """ % (gauss_input, gauss_input)))
+            # check that the Linda nodes are correct
+            lindaline=(`grep -i 'lindaworker' %s`)
+            if [[ $lindaline == *$string ]]
+            then
+            \techo "Using the correct nodes for Linda"
+            else
+            \techo "Using the wrong nodes for Linda"
+            \techo "Nodes assigned by scheduler = $string"
+            \techo "Line in Gaussian input file = $lindaline"
+            \texit 1
+            fi """ % (gauss_input, gauss_input)))
 
-#   if queue == 'bf':
-#       f.write(textwrap.dedent("""\
-#         \n
-#         # copy last log file to another name
-#         num=`ls -l %s*.log | wc -l`
-#         let "num += 1"
-#         cp %s.log %s$num.log""" % (f_input[0], f_input[0], f_input[0])))
+    if queue == 'bf' or queue == 'ckpt':
+        f.write(textwrap.dedent("""\
+          \n
+          # copy last log file to another name
+          num=`ls -l %s*.log | wc -l`
+          let "num += 1"
+          cp %s.log %s$num.log""" % (f_input[0], f_input[0], f_input[0])))
 
     if 'gdv' in version: 
         command = 'gdv'
@@ -612,3 +631,4 @@ if __name__ == '__main__':
     if   gen == 'ikt': write_Ikt_script()
     elif gen == 'mox': write_Mox_script()
 #----------------------------------------------------------------------------
+
