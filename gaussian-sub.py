@@ -5,11 +5,8 @@ import sys
 import os
 import re
 import textwrap
-try:
-    from subprocess import check_output
-except ImportError:
-    print('\nERROR: Must load at least anaconda_2.3 environment on Ikt\n')
-    sys.exit()
+import subprocess 
+from subprocess import Popen, PIPE
 
 '''
   Patrick J. Lestrange 2017
@@ -32,7 +29,7 @@ def get_user_input():
     #--------------------------------------
     # Determine which generation machine we're on
     gen  = 'ikt'
-    host = check_output('hostname',shell=True)
+    host = Popen('hostname',stdout=PIPE).stdout.read()
     if 'mox' in host: gen = 'mox'
     #--------------------------------------
 
@@ -64,8 +61,9 @@ def get_user_input():
 
     #--------------------------------------
     # Check that the user has the right permissions to use Gaussian.
-    username = check_output('whoami',shell=True)
-    groups = check_output('groups '+username,shell=True).split(' ')
+    username = Popen('whoami',stdout=PIPE).stdout.read().strip()
+    command = 'groups '+username
+    groups = Popen(command,stdout=PIPE,shell=True).stdout.read().split(' ')
     groups[-1] = groups[-1].strip()
     if 'ligroup-gaussian' not in groups: 
         print(textwrap.fill(textwrap.dedent("""\
@@ -124,10 +122,11 @@ def get_user_input():
             allocation_name = allocation.split('-')
             if gen == 'ikt':
                 command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-                max_nodes = int(check_output(command,shell=True))
+                max_nodes = Popen(command,stdout=PIPE,shell=True)
+                max_nodes = int(max_nodes.stdout.read())
             elif gen == 'mox':
                 command = 'hyakalloc | grep '+allocation_name[1]
-                specs = check_output(command,shell=True).split()
+                specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
                 max_nodes = int(specs[1])
                 smallest_mem = int(specs[2][:-1])
         else: # STF allocation
@@ -161,20 +160,24 @@ def get_user_input():
             print('Checking what types of nodes are in this allocation...')
             if gen == 'ikt':
                 command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
-                max_28_cores = int(check_output(command,shell=True))
+                max_28_cores = Popen(command,stdout=PIPE,shell=True)
+                max_28_cores = int(max_28_cores.stdout.read())
                 if max_28_cores != 0: smallest_node = 28 
                 command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-                max_16_cores = int(check_output(command,shell=True))
+                max_16_cores = Popen(command,stdout=PIPE,shell=True)
+                max_16_cores = int(max_16_cores.stdout.read())
                 if max_16_cores != 0: smallest_node = 16 
                 command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-                max_12_cores = int(check_output(command,shell=True))
+                max_12_cores = Popen(command,stdout=PIPE,shell=True)
+                max_12_cores = int(max_12_cores.stdout.read())
                 if max_12_cores != 0: smallest_node = 12 
                 command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-                max_8_cores = int(check_output(command,shell=True))
+                max_8_cores = Popen(command,stdout=PIPE,shell=True)
+                max_8_cores = int(max_8_cores.stdout.read())
                 if max_8_cores != 0: smallest_node = 8
             elif gen == 'mox':
                 command = 'hyakalloc '+allocation_name[1]
-                specs = check_output(command,shell=True).split()
+                specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
                 smallest_node = 28
                 max_8_cores   = 0
                 max_12_cores  = 0
@@ -255,17 +258,30 @@ def get_user_input():
     for version in g16_versions: print('[g16.'+version+']',end=' ') 
     if gdv:
         for version in gdv_versions: print('[gdv.'+version+']',end=' ') 
-    print('- (default) ',end='')
-    print(': ',end='')
+    print('- (default) : ',end='')
     version = raw_input('')
     if version == '':
         if gdv: version = 'gdv.'+gdv_versions[-1]
         else: version = 'g16.'+g16_versions[-1]
     version_name = version.split('.')
-    if version_name[1] not in g09_versions: 
-        if version_name[1] not in gdv_versions and gdv == False:
-            print('Choose a valid version of Gaussian - '+version_name[1])
-            sys.exit()
+    if len(version_name) != 2:
+        print("Can't recognize the specificed version")
+        sys.exit()
+    bad_version = False
+    if version_name[0] == 'g09':
+        if version_name[1] not in g09_versions:
+            bad_version = True
+    elif version_name[0] == 'g16':
+        if version_name[1] not in g16_versions:
+            bad_version = True
+    elif version_name[0] == 'gdv':
+        if version_name[1] not in gdv_versions:
+						bad_version = True
+    else:
+        bad_version = True
+    if bad_version:
+        print('Choose a valid version of Gaussian. Not %s.%s' % (version_name[0], version_name[1]))
+        sys.exit()
     print('Using the '+version+' version of Gaussian\n')  
     #--------------------------------------
 
@@ -425,7 +441,7 @@ def write_Ikt_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    pwd = check_output('pwd',shell=True).strip()
+    pwd = Popen('pwd',stdout=PIPE,shell=True).stdout.read().strip()
     f = open(f_output,'w')
 
     f.write(textwrap.dedent("""\
@@ -521,7 +537,7 @@ def write_Mox_script():
 
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     print('Writing to '+f_output+'\n')
-    pwd = check_output('pwd',shell=True).strip()
+    pwd = Popen('pwd',stdout=PIPE,shell=True).stdout.read().strip()
     f = open(f_output,'w')
     short_name = re.split('-',allocation)[1]
     partition, account = short_name, short_name
