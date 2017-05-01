@@ -100,10 +100,13 @@ def get_user_input():
             for allocation in allocs:
                 print('['+allocation+']',end=' ') 
                 if 'hyak-stf' in allocation: print('- (default) ',end='')
+            if 'hyak-stf' not in allocs: print('- (default) ',end='')
             print(': ',end='')
             allocation = raw_input('')
             if allocation == '' and 'hyak-stf' in allocs: 
                 allocation = 'hyak-stf'
+            elif allocation == '' and 'hyak-stf' not in allocs: 
+                allocation = allocs[-1]
             if allocation not in allocs:
                 print(textwrap.fill(textwrap.dedent("""\
                     ERROR: You must choose an allocation that you 
@@ -239,6 +242,7 @@ def get_user_input():
                   How much memory do you want to use
                   on each node? (default=%dGb) : """ % smallest_mem).strip()))
         if memory == '': memory = smallest_mem
+        else: memory = int(memory)
         print('Using %d node(s) with %d cores and %d Gb\n' % 
             (n_nodes, n_cores, memory))
     #--------------------------------------
