@@ -334,11 +334,9 @@ def check_Gaussian_input():
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     f = open(gauss_input,'r')
     contents = f.readlines()
-    found_linda = False
-    memory = 0
-    nproc  = 0
+    found_linda, exit, gb = False, False, False
+    memory, nproc = 0, 1
     warnings = []
-    exit = False
 
     for line in contents:
         if 'lindaworker' in line.lower(): found_linda = True 
@@ -360,6 +358,20 @@ def check_Gaussian_input():
             nproc_line = line.split('=')
             nproc_line[-1] = nproc_line[-1].strip()
             nproc = int(nproc_line[1])
+        if 'chk' in line.lower():
+            pwd = Popen('pwd',stdout=PIPE,shell=True).stdout.read().strip()
+            if 'c:' in line.lower():
+                warning = textwrap.dedent("""\
+                    Your checkpoint file includes the C: drive and there is
+                    no C: drive on this machine. Please update the path for
+                    your checkpoint file.""")
+                warnings.append(warning)
+                exit = True
+            if '/' in line.lower() or '\\' in line.lower() and pwd not in line.lower():
+                warning = textwrap.dedent("""\
+                    The path specified for your checkpoint file is not the current
+                    directory. You may want to change this. This is just a warning.""")
+                warnings.append(warning)
 
     if gb and allocation == 'hyak-stf':
         if gen == 'ikt' and memory > 32:
@@ -401,7 +413,7 @@ def check_Gaussian_input():
         if gen == 'ikt' and nproc < 16:
             warning = textwrap.dedent("""\
                 You usually want to use all the cores on a node. The
-                STF nodes have 16 cores and you've asked for %d cores.
+                STF nodes have 16 cores and you've asked for %d core(s).
                 This is just a warning.""" % nproc)
             warnings.append(warning)
         elif gen == 'mox' and nproc < 28:
