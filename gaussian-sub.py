@@ -254,7 +254,7 @@ def get_user_input():
         g16_versions = ['a03']
         gdv_versions = ['i03','i03p','i04p','i06','i06p','i09']
     elif gen == 'mox':
-        g09_versions = []
+        g09_versions = ['e01']
         g16_versions = ['a03']
         gdv_versions = ['i03p','i04p','i06p','i10pp']
     print('Which version of Gaussian would you like to use?')
