@@ -466,9 +466,9 @@ def write_Ikt_script():
         #PBS -l nodes=%d:ppn=%d,feature=%dcore""" 
         % (f_input[0], n_nodes, n_cores, n_cores))) 
     if queue != 'bf':
-      f.write('\n#PBS -l walltime=%d:00:00\n' % time)
+        f.write('\n#PBS -l walltime=%d:00:00\n' % time)
     else:
-      f.write('\n#PBS -l walltime=0:%d:00\n' % time)
+        f.write('\n#PBS -l walltime=0:%d:00\n' % time)
     f.write(textwrap.dedent("""\
         #PBS -j oe
         #PBS -o %s
@@ -564,13 +564,17 @@ def write_Mox_script():
     f.write(textwrap.dedent("""\
         #!/bin/bash
         #SBATCH --job-name=%s
-        #SBATCH --nodes=%d 
-        #SBATCH --time=%d:00:00
+        #SBATCH --nodes=%d""" % (f_input[0], n_nodes)))
+    if queue == 'bf' or queue == 'ckpt':
+        f.write('\n#SBATCH --time=0:%d:00\n' % time)
+    else:
+        f.write('\n#SBATCH --time=%d:00:00\n' % time)
+    f.write(textwrap.dedent("""\
         #SBATCH --mem=%dG
         #SBATCH --workdir=%s
         #SBATCH --partition=%s
         #SBATCH --account=%s\n\n""" 
-        % (f_input[0], n_nodes, time, memory, pwd, partition, account))) 
+        % (memory, pwd, partition, account))) 
     f.write(textwrap.dedent("""\
         # load Gaussian environment
         module load contrib/%s
