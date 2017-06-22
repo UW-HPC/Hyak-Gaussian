@@ -472,9 +472,9 @@ def write_Ikt_script():
     f.write(textwrap.dedent("""\
         #PBS -j oe
         #PBS -o %s
-        #PBS -d %s""" % (pwd, pwd)))
+        #PBS -d %s\n""" % (pwd, pwd)))
     if queue == 'batch': 
-        f.write('\n#PBS -W group_list=%s\n' % allocation)
+        f.write('#PBS -W group_list=%s\n' % allocation)
     f.write(textwrap.dedent("""\
         #PBS -q %s
 
