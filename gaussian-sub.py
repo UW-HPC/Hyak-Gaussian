@@ -152,8 +152,10 @@ def get_user_input():
     if n_nodes > 1: linda = True
     else: linda = False
     if linda:
-        print('NOTE: You must include "%lindaworker" in your\n'
-             +'      input file when using more than one node') 
+        print(textwrap.fill(textwrap.dedent("""\
+            NOTE: You must include "%lindaworker" in your input file when 
+            using more than one node. Some version also require including
+            %UseSSH in your Gaussian input file."""),60)) 
     #--------------------------------------
  
     #--------------------------------------
@@ -334,12 +336,13 @@ def check_Gaussian_input():
     gauss_input = str(f_input[0])+'.'+str(f_input[1])
     f = open(gauss_input,'r')
     contents = f.readlines()
-    found_linda, exit, gb = False, False, False
+    found_linda, found_ssh, exit, gb = False, False, False, False
     memory, nproc = 0, 1
     warnings = []
 
     for line in contents:
         if 'lindaworker' in line.lower(): found_linda = True 
+        if 'usessh' in line.lower(): found_ssh = True 
         if 'mem' in line.lower():
             mem_line = line.split('=')
             mem_line[-1] = mem_line[-1].strip()
@@ -430,7 +433,15 @@ def check_Gaussian_input():
             line or request only one node. Not forming PBS script.""")
         warnings.append(warning)
         exit = True
-    
+   
+    if linda and not found_ssh:
+        warning = textwrap.dedent("""\
+            Your input file does not contain %UseSSH, but
+            you have asked to use more than one node. This is can be
+            a problem for some versions of Gaussian. Please add this
+            line or request only one node. This is just a warning.""")
+        warnings.append(warning)
+ 
     if found_linda and n_nodes == 1:
         warning = textwrap.dedent("""\
             Your input file contains %lindaworker, but you have
