@@ -187,7 +187,7 @@ def get_user_input():
                 max_8_cores   = 0
                 max_12_cores  = 0
                 max_16_cores  = 0
-                max_28_cores  = int(specs[11])
+                max_28_cores  = int(specs[15])
         else:
             if gen == 'ikt':
                 smallest_node = 16
@@ -256,9 +256,9 @@ def get_user_input():
         g16_versions = ['a03']
         gdv_versions = ['i03','i03p','i04p','i06','i06p','i09']
     elif gen == 'mox':
-        g09_versions = ['e01']
+        g09_versions = ['a02','e01']
         g16_versions = ['a03']
-        gdv_versions = ['i03p','i04p','i06p','i10pp']
+        gdv_versions = ['i03','i03p','i04p','i06p','i10pp']
     print('Which version of Gaussian would you like to use?')
     for version in g09_versions: print('[g09.'+version+']',end=' ') 
     for version in g16_versions: print('[g16.'+version+']',end=' ') 
@@ -584,7 +584,7 @@ def write_Mox_script():
         #SBATCH --mem=%dG
         #SBATCH --workdir=%s
         #SBATCH --partition=%s
-        #SBATCH --account=%s\n\n""" 
+        #SBATCH --account=%s\n\n"""
         % (memory, pwd, partition, account))) 
     f.write(textwrap.dedent("""\
         # load Gaussian environment
