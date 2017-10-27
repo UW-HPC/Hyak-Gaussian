@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
 from __future__ import print_function
+
 import sys
 import os
 import re
+
 import textwrap
-import subprocess 
 from subprocess import Popen, PIPE
 
 '''
@@ -34,14 +35,11 @@ def get_user_input():
     #--------------------------------------
 
     #--------------------------------------
-    # There should only be one argument: the Gaussian input file.
-    '''AW Multifile
+    # Check arguments
     if len(sys.argv) != 2: 
-        print(textwrap.fill(textwrap.dedent("""\
-            ERROR: There should only be one argument to 
-            gaussian-sub.py""")))
-        sys.exit()
-    '''
+        print("Usings the same parameters for all files")
+        print(sys.argv[1:])
+        print()
     if sys.argv[1] == '-h' or 'help' in sys.argv[1]:
         print_help()
         sys.exit()  
@@ -49,7 +47,6 @@ def get_user_input():
 
     #--------------------------------------
     # Check that the argument is a .com or .gjf and that it exists.
-    # AW Multifile: added for loop
     f_input = []
     for fil in sys.argv[1:]:
         f_temp= fil.split('.')
@@ -292,7 +289,8 @@ def get_user_input():
     else:
         bad_version = True
     if bad_version:
-        print('Choose a valid version of Gaussian. Not %s.%s' % (version_name[0], version_name[1]))
+        print('Choose a valid version of Gaussian. Not %s.%s' 
+            % (version_name[0], version_name[1]))
         sys.exit()
     print('Using the '+version+' version of Gaussian\n')  
     #--------------------------------------
@@ -323,10 +321,8 @@ def get_user_input():
 
     #--------------------------------------
     # Get a name for the .pbs script.
-    # AW Multifile - changed f_input and f_output to lists of lists
     extension = 'pbs'
     if gen == 'mox': extension = 'sh'
-    # AW Mutifile - assume default if multiple files submitted
     if len(f_input) == 1:
         f_output = raw_input(textwrap.fill(textwrap.dedent("""\
                    What should the .%s script be named? 
@@ -334,6 +330,7 @@ def get_user_input():
                                              extension) )))
         if f_output == '': f_output = [f_input[0][0]+'.'+extension]
         else: f_output = [f_output+'.'+extension]
+    # AW - assume default if multiple files submitted
     else:
         f_output = [f_i[0]+'.'+extension for f_i in f_input]
     #--------------------------------------
@@ -343,7 +340,7 @@ def get_user_input():
 #----------------------------------------------------------------------------
 def check_Gaussian_input():
     """Read the Gaussian input file and check for problems."""
-    # AW Multifile - Loop over all inputs
+
     for fil in f_input:
         gauss_input = str(fil[0])+'.'+str(fil[1])
         f = open(gauss_input,'r')
@@ -382,10 +379,12 @@ def check_Gaussian_input():
                         your checkpoint file.""")
                     warnings.append(warning)
                     exit = True
-                if '/' in line.lower() or '\\' in line.lower() and pwd not in line.lower():
+                if '/' in line.lower() or '\\' in line.lower() and \
+                    pwd not in line.lower():
                     warning = textwrap.dedent("""\
-                        The path specified for your checkpoint file is not the current
-                        directory. You may want to change this. This is just a warning.""")
+                        The path specified for your checkpoint file is not the 
+                        current directory. You may want to change this. This is 
+                        just a warning.""")
                     warnings.append(warning)
  
         if gb and allocation == 'hyak-stf':
@@ -478,8 +477,8 @@ def check_Gaussian_input():
 def write_Ikt_script():
     """Make a .pbs script based on user specifications."""
 
-    # AW Multifile - add loop and change f_(in|out) data structures
     for i in range(len(f_input)):
+
         gauss_input = str(f_input[i][0])+'.'+str(f_input[i][1])
         print('Writing to '+f_output[i]+'\n')
         pwd = Popen('pwd',stdout=PIPE,shell=True).stdout.read().strip()
@@ -554,7 +553,8 @@ def write_Ikt_script():
               # copy last log file to another name
               num=`ls -l %s*.log | wc -l`
               let "num += 1"
-              cp %s.log %s$num.log""" % (f_input[i][0], f_input[i][0], f_input[i][0])))
+              cp %s.log %s$num.log""" % (f_input[i][0], f_input[i][0], 
+              f_input[i][0])))
  
         if 'gdv' in version: 
             command = 'gdv'
@@ -569,14 +569,17 @@ def write_Ikt_script():
  
             exit 0 """ % (command, gauss_input)))
 
-    print("""Please run 'qsub %s' to submit to the scheduler\n""" % f_output[0])
+        print("""Please run 'qsub %s' to submit to the scheduler\n""" 
+              % f_output[i])
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
 def write_Mox_script():
     """Make a .sh script based on user specifications."""
-    #AW Multifile - Add loop and correct f_(in|out)put data structures
+
+    # Loop over the input files
     for i in range(len(f_input)):
+
         gauss_input = str(f_input[i][0])+'.'+str(f_input[i][1])
         print('Writing to '+f_output[i]+'\n')
         pwd = Popen('pwd',stdout=PIPE,shell=True).stdout.read().strip()
@@ -646,7 +649,8 @@ def write_Mox_script():
               # copy last log file to another name
               num=`ls -l %s*.log | wc -l`
               let "num += 1"
-              cp %s.log %s$num.log""" % (f_input[i][0], f_input[i][0], f_input[i][0])))
+              cp %s.log %s$num.log""" % (f_input[i][0], f_input[i][0], 
+              f_input[i][0])))
  
         if 'gdv' in version: 
             command = 'gdv'
@@ -661,7 +665,9 @@ def write_Mox_script():
  
             exit 0 """ % (command, gauss_input)))
 
-    print("""Please run 'sbatch %s' to submit to the scheduler\n""" % f_output[0])
+        print("""Please run 'sbatch %s' to submit to the scheduler\n""" 
+              % f_output[i])
+
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
