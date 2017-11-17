@@ -37,7 +37,7 @@ def get_user_input():
     #--------------------------------------
     # Check arguments
     if len(sys.argv) != 2: 
-        print("Usings the same parameters for all files")
+        print("Using the same parameters for all files")
         print(sys.argv[1:])
         print()
     if sys.argv[1] == '-h' or 'help' in sys.argv[1]:
@@ -185,12 +185,13 @@ def get_user_input():
                 if max_8_cores != 0: smallest_node = 8
             elif gen == 'mox':
                 command = 'hyakalloc '+allocation_name[1]
-                specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
+                specs = Popen(command,stdout=PIPE,shell=True).stdout.read()\
+                              .split('\n')[2].split()
                 smallest_node = 28
                 max_8_cores   = 0
                 max_12_cores  = 0
                 max_16_cores  = 0
-                max_28_cores  = int(specs[15])
+                max_28_cores  = int(specs[1])
         else:
             if gen == 'ikt':
                 smallest_node = 16
