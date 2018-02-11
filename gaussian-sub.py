@@ -97,20 +97,20 @@ def get_user_input():
     if queue == 'batch' or queue == 'ckpt':
         allocs= []
         for group in groups:
-            if 'hyak-' in group and 'test' not in group: allocs.append(group)
+            if 'hyak-' in group:
+                if 'test' not in group and 'highmem' not in group:
+                    allocs.append(group)
         if len(allocs) > 1:
             print('Whose allocation would you like to use?')
             for allocation in allocs:
                 print('['+allocation+']',end=' ') 
-                if 'hyak-stf' in allocation: print('- (default) ',end='')
-            if 'hyak-stf' not in allocs: print('- (default) ',end='')
             print(': ',end='')
             allocation = raw_input('')
-            if allocation == '' and 'hyak-stf' in allocs: 
-                allocation = 'hyak-stf'
-            elif allocation == '' and 'hyak-stf' not in allocs: 
-                allocation = allocs[-1]
-            if allocation not in allocs:
+            if allocation == '':
+                print(textwrap.fill(textwrap.dedent("""\
+                    ERROR: You must specify an allocation"""),100))
+                sys.exit()
+            elif allocation not in allocs:
                 print(textwrap.fill(textwrap.dedent("""\
                     ERROR: You must choose an allocation that you 
                     are a part of"""),100))
