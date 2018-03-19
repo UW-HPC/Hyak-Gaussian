@@ -257,11 +257,11 @@ def get_user_input():
     # Determine which version of Gaussian to use.
     if gen == 'ikt':
         g09_versions = ['d01','e01']
-        g16_versions = ['a03']
+        g16_versions = ['a03', 'b01']
         gdv_versions = ['i03','i03p','i04p','i06','i06p','i09']
     elif gen == 'mox':
         g09_versions = ['a02','e01']
-        g16_versions = ['a03']
+        g16_versions = ['a03', 'b01']
         gdv_versions = ['i03','i03p','i04p','i06p','i10pp','i11p']
     print('Which version of Gaussian would you like to use?')
     for version in g09_versions: print('[g09.'+version+']',end=' ') 
