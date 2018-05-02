@@ -262,7 +262,7 @@ def get_user_input():
     elif gen == 'mox':
         g09_versions = ['a02','e01']
         g16_versions = ['a03', 'b01']
-        gdv_versions = ['i03','i03p','i04p','i06p','i10pp','i11p']
+        gdv_versions = ['i03','i03p','i04p','i06p','i10pp','i11p','i13','i13p']
     print('Which version of Gaussian would you like to use?')
     for version in g09_versions: print('[g09.'+version+']',end=' ') 
     for version in g16_versions: print('[g16.'+version+']',end=' ') 
