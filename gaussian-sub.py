@@ -81,12 +81,11 @@ def get_user_input():
     # Determine which queue to submit to.
     queue = raw_input(textwrap.fill(textwrap.dedent("""\
             Which queue would you like to submit to?
-            [batch] - (default) or [bf|ckpt] : """),100))
+            [batch] - (default) or [ckpt] : """),100))
     if queue == '': queue = 'batch'
-    if queue == 'bf' and gen == 'mox': queue = 'ckpt'
-    if queue == 'ckpt' and gen == 'ikt': queue = 'bf'
-    if queue != 'batch' and queue != 'bf' and queue != 'ckpt':
-        print('ERROR: Invalid option for a queue. Must be batch, bf, or ckpt')
+    if queue == 'bf': queue = 'ckpt'
+    if queue != 'batch' and queue != 'ckpt':
+        print('ERROR: Invalid option for a queue. Must be batch or ckpt')
         sys.exit()
     print('Using the '+queue+' queue\n')
     #--------------------------------------
@@ -126,6 +125,7 @@ def get_user_input():
         if allocation != 'hyak-stf':
             print('Checking how many nodes are in this allocation...')
             allocation_name = allocation.split('-')
+            # TODO: Figure out if this command still works on ikt post July 10 
             if gen == 'ikt':
                 command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
                 max_nodes = Popen(command,stdout=PIPE,shell=True)
@@ -136,6 +136,7 @@ def get_user_input():
                 max_nodes = int(specs[1])
                 smallest_mem = int(specs[2][:-1])
         else: # STF allocation
+            # TODO: Update these numbers (better yet- why is this a special case?)
             if   gen == 'ikt': max_nodes = 54
             elif gen == 'mox': max_nodes = 40
     else:
@@ -166,6 +167,7 @@ def get_user_input():
     if queue == 'batch':
         if allocation != 'hyak-stf':
             print('Checking what types of nodes are in this allocation...')
+            # TODO: Check if these commands still work after July 10
             if gen == 'ikt':
                 command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
                 max_28_cores = Popen(command,stdout=PIPE,shell=True)
@@ -322,8 +324,7 @@ def get_user_input():
 
     #--------------------------------------
     # Get a name for the .pbs script.
-    extension = 'pbs'
-    if gen == 'mox': extension = 'sh'
+    extension = 'sh'
     if len(f_input) == 1:
         f_output = raw_input(textwrap.fill(textwrap.dedent("""\
                    What should the .%s script be named? 
@@ -697,7 +698,6 @@ def print_help():
 if __name__ == '__main__':
     get_user_input()
     check_Gaussian_input()
-    if   gen == 'ikt': write_Ikt_script()
-    elif gen == 'mox': write_Mox_script()
+    write_Mox_script()
 #----------------------------------------------------------------------------
 
