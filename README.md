@@ -21,3 +21,9 @@ Usage
 `gaussian-sub.py input.com`
 
 `gaussian-sub.py input.gjf`
+
+or
+
+`python gaussian-sub.py input.com`
+
+`python gaussian-sub.py input.gjf`
