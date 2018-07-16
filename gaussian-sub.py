@@ -223,6 +223,7 @@ def get_user_input():
               How many cores do you want to use
               on each node? (default=%d) : """ % smallest_node).strip()))
     if n_cores == '': n_cores = 0
+    else: n_cores = int(n_cores)
     if int(n_cores) < smallest_node:
         print(textwrap.fill(textwrap.dedent("""\
             Setting number of cores to be the smallest
