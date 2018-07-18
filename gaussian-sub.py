@@ -17,6 +17,8 @@ from subprocess import Popen, PIPE
 
                    Also used as a teaching aid in UW's
                    CHEM 465/565 Computations in Chemistry.
+
+  Maintained by Andrew Wildman
 '''
 
 #----------------------------------------------------------------------------
@@ -36,6 +38,9 @@ def get_user_input():
 
     #--------------------------------------
     # Check arguments
+    if len(sys.argv) == 1:
+        print('No files specified')
+        exit()
     if len(sys.argv) != 2: 
         print("Using the same parameters for all files")
         print(sys.argv[1:])
@@ -44,7 +49,7 @@ def get_user_input():
         print_help()
         sys.exit()  
     #--------------------------------------
-
+    
     #--------------------------------------
     # Check that the argument is a .com or .gjf and that it exists.
     f_input = []
@@ -56,12 +61,12 @@ def get_user_input():
         if len(f_temp) != 2:
             print('ERROR: The filename must include the extension')
             sys.exit()
-        if f_temp[1] != 'com' and f_temp[1] != 'gjf':
+        if f_temp[-1] != 'com' and f_temp[-1] != 'gjf':
             print('ERROR: The file extension must be .com or .gjf')
             sys.exit()
         f_input.append(f_temp)
     #--------------------------------------
-
+    
     #--------------------------------------
     # Check that the user has the right permissions to use Gaussian.
     username = Popen('whoami',stdout=PIPE).stdout.read().strip()
@@ -89,61 +94,54 @@ def get_user_input():
         sys.exit()
     print('Using the '+queue+' queue\n')
     #--------------------------------------
-
+    
     #--------------------------------------
-    # Determine which group's nodes to use. STF is the default if available.
+    # Determine which group's nodes to use.
     allocation = ''
     if queue == 'batch' or queue == 'ckpt':
         allocs= []
+        command = 'sinfo -o "%P"'
+        partitions = Popen(command,stdout=PIPE,shell=True).stdout.read().split()[1:]
         for group in groups:
             if 'hyak-' in group:
                 if 'test' not in group and 'highmem' not in group:
-                    allocs.append(group)
-        if len(allocs) > 1:
-            print('Whose allocation would you like to use?')
-            for allocation in allocs:
-                print('['+allocation+']',end=' ') 
-            print(': ',end='')
-            allocation = raw_input('')
-            if allocation == '':
-                print(textwrap.fill(textwrap.dedent("""\
-                    ERROR: You must specify an allocation"""),100))
-                sys.exit()
-            elif allocation not in allocs:
-                print(textwrap.fill(textwrap.dedent("""\
-                    ERROR: You must choose an allocation that you 
-                    are a part of"""),100))
-                sys.exit()
-        else:
-            allocation = str(allocs[0])
+                    if group.split('-')[1] in partitions:
+                        allocs.append(group)
+        print('Whose allocation would you like to use?')
+        for allocation in allocs:
+            print('['+allocation+']',end=' ') 
+        print(': ',end='')
+        allocation = raw_input('')
+        if allocation == '':
+            print(textwrap.fill(textwrap.dedent("""\
+                ERROR: You must specify an allocation"""),100))
+            sys.exit()
+        elif allocation not in allocs:
+            print(textwrap.fill(textwrap.dedent("""\
+                ERROR: You must choose an allocation that you 
+                are a part of"""),100))
+            sys.exit()
         print('Submitting to the '+allocation+' allocation\n')
     #--------------------------------------
 
     #--------------------------------------
     # Ask how many nodes to use.
     if queue == 'batch':
-        if allocation != 'hyak-stf':
-            print('Checking how many nodes are in this allocation...')
-            allocation_name = allocation.split('-')
-            # TODO: Figure out if this command still works on ikt post July 10 
-            if gen == 'ikt':
-                command = 'nodestate '+allocation_name[1]+' | grep n0 | wc -l'
-                max_nodes = Popen(command,stdout=PIPE,shell=True)
-                max_nodes = int(max_nodes.stdout.read())
-            elif gen == 'mox':
-                command = 'hyakalloc | grep '+allocation_name[1]
-                specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
-                max_nodes = int(specs[1])
-                smallest_mem = int(specs[2][:-1])
-        else: # STF allocation
-            # TODO: Update these numbers (better yet- why is this a special case?)
-            if   gen == 'ikt': max_nodes = 54
-            elif gen == 'mox': max_nodes = 40
+        print('Checking how many nodes are in this allocation...')
+        allocation_name = allocation.split('-')
+        command = 'hyakalloc | grep '+allocation_name[1]
+        specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
+        max_nodes = int(specs[1])
+        smallest_mem = int(specs[2][:-1])
     else:
         max_nodes = 1000
+
     n_nodes = raw_input('How many nodes do you want to use? (default=1) : ')
-    if n_nodes == '': n_nodes = 1
-    else: n_nodes = int(n_nodes)
+    if n_nodes == '':
+        n_nodes = 1
+    else:
+        n_nodes = int(n_nodes)
+
     if max_nodes == 0:
         print(textwrap.fill(textwrap.dedent("""\
             ERROR: There are no nodes available for this allocation"""),100))
@@ -153,8 +151,12 @@ def get_user_input():
             ERROR: You must select at least one node and
             less than %d""" % max_nodes),100))
         sys.exit()
-    if n_nodes > 1: linda = True
-    else: linda = False
+
+    if n_nodes > 1:
+        linda = True
+    else:
+        linda = False
+
     if linda:
         print(textwrap.fill(textwrap.dedent("""\
             NOTE: You must include "%lindaworker" in your input file when 
@@ -164,96 +166,77 @@ def get_user_input():
  
     #--------------------------------------
     # Ask how many cores/memory on each node to use.
+    print('Checking what types of nodes are in this allocation...')
     if queue == 'batch':
-        if allocation != 'hyak-stf':
-            print('Checking what types of nodes are in this allocation...')
-            # TODO: Check if these commands still work after July 10
-            if gen == 'ikt':
-                command = 'mdiagn -t '+allocation_name[1]+' | grep ":28 " | wc -l'
-                max_28_cores = Popen(command,stdout=PIPE,shell=True)
-                max_28_cores = int(max_28_cores.stdout.read())
-                if max_28_cores != 0: smallest_node = 28 
-                command = 'mdiagn -t '+allocation_name[1]+' | grep ":16 " | wc -l'
-                max_16_cores = Popen(command,stdout=PIPE,shell=True)
-                max_16_cores = int(max_16_cores.stdout.read())
-                if max_16_cores != 0: smallest_node = 16 
-                command = 'mdiagn -t '+allocation_name[1]+' | grep ":12 " | wc -l'
-                max_12_cores = Popen(command,stdout=PIPE,shell=True)
-                max_12_cores = int(max_12_cores.stdout.read())
-                if max_12_cores != 0: smallest_node = 12 
-                command = 'mdiagn -t '+allocation_name[1]+' | grep ":8 " | wc -l'
-                max_8_cores = Popen(command,stdout=PIPE,shell=True)
-                max_8_cores = int(max_8_cores.stdout.read())
-                if max_8_cores != 0: smallest_node = 8
-            elif gen == 'mox':
-                command = 'hyakalloc '+allocation_name[1]
-                specs = Popen(command,stdout=PIPE,shell=True).stdout.read()\
-                              .split('\n')[2].split()
-                smallest_node = 28
-                max_8_cores   = 0
-                max_12_cores  = 0
-                max_16_cores  = 0
-                max_28_cores  = int(specs[1])
-        else:
-            if gen == 'ikt':
-                smallest_node = 16
-                max_8_cores   = 0
-                max_12_cores  = 0
-                max_16_cores  = 54
-            elif gen == 'mox':
-                smallest_node = 28
-                max_8_cores   = 0
-                max_12_cores  = 0
-                max_16_cores  = 0
-                max_28_cores  = 40
+        command = 'sinfo -p ' + allocation_name[1] + ' -e -O "nodes,cpus"'
+        specs = Popen(command, stdout=PIPE, shell=True).stdout.read().split()
     else:
-        if gen == 'ikt':
-            smallest_node = 8
-            max_8_cores   = 171
-            max_12_cores  = 257
-            max_16_cores  = 430
-            max_28_cores  = 0
-        elif gen == 'mox':
-            smallest_node = 28
-            max_8_cores   = 0
-            max_12_cores  = 0
-            max_16_cores  = 0
-            max_28_cores  = 208
+        command = 'sinfo -p ckpt -e -O "nodes,cpus"'
+        specs = Popen(command, stdout=PIPE, shell=True).stdout.read().split()
+    nodes_per_cpu = {}
+    for i in range(1, len(specs)//2):
+        nodes_per_cpu[int(specs[2*i+1])] =  int(specs[2*i])
+    smallest_node = min(nodes_per_cpu)
     n_cores = raw_input(textwrap.fill(textwrap.dedent("""\
               How many cores do you want to use
               on each node? (default=%d) : """ % smallest_node).strip()))
-    if n_cores == '': n_cores = 0
-    else: n_cores = int(n_cores)
-    if int(n_cores) < smallest_node:
-        print(textwrap.fill(textwrap.dedent("""\
-            Setting number of cores to be the smallest
-            option in this allocation"""),100))
-        n_cores = smallest_node
-    too_much = True
-    if n_cores == 8 and n_nodes > max_8_cores:
-        n_nodes = max_8_cores
-    elif n_cores == 12 and n_nodes > max_12_cores:
-        n_nodes = max_12_cores
-    elif n_cores == 16 and n_nodes > max_16_cores:
-        n_nodes = max_16_cores
-    else:
-        too_much = False
-    if too_much:
-        print('You requested too many nodes with '+n_cores+' cores'
-             +'Resetting to maximum number of nodes with that many cores')
 
-    if gen == 'ikt':
-        print('Using %d node(s) with %d cores\n' % 
-            (n_nodes, n_cores))
-    elif gen == 'mox':
-        smallest_mem = 128
-        memory = raw_input(textwrap.fill(textwrap.dedent("""\
-                  How much memory do you want to use
-                  on each node? (default=%dGb) : """ % smallest_mem).strip()))
-        if memory == '': memory = smallest_mem
-        else: memory = int(memory)
-        print('Using %d node(s) with %d cores and %d Gb\n' % 
-            (n_nodes, n_cores, memory))
+    if n_cores == '':
+        n_cores = 0
+    else:
+        n_cores = int(n_cores)
+
+    if n_cores > max(nodes_per_cpu):
+        print(textwrap.fill(textwrap.dedent("""\
+            You cannot request more than the maximum
+            number of cores on this allocation. (%d)""" % (max(nodes_per_cpu))),100))
+        exit()
+
+    try:
+        max_nodes = nodes_per_cpu[n_cores]
+    except KeyError:
+        for cores in sorted(nodes_per_cpu):
+            if n_cores < cores:
+                max_nodes = nodes_per_cpu[cores]
+                print(textwrap.fill(textwrap.dedent("""\
+                    Requesting all the cores on the smallest node (%d)
+                    that fits the requested number (%d)""" % (cores, n_cores)),100))
+                n_cores = cores
+                break
+
+    if n_nodes > max_nodes:
+        n_nodes = max_nodes
+        print('You requested too many nodes with '+n_cores+' cores')
+        print('Resetting to maximum number of nodes with that many cores (%d)' %(max_nodes))
+
+
+    print('Checking available memory for the requested nodes...')
+    if queue == 'batch':
+        command = 'sinfo -p ' + allocation_name[1] + ' -e -O "cpus,memory" | grep ^' + str(n_cores)
+        specs = Popen(command, stdout=PIPE, shell=True).stdout.read().split()
+    else:
+        command = 'sinfo -p ckpt -e -O "cpus,memory" | grep ^' + str(n_cores)
+        specs = Popen(command, stdout=PIPE, shell=True).stdout.read().split()
+    # - 10 for os overhead
+    mem_types = [int(specs[2*i+1])//1000 - 10 for i in range(len(specs)//2)]
+    smallest_mem = min(mem_types)
+    max_mem = max(mem_types)
+
+    memory = raw_input(textwrap.fill(textwrap.dedent("""\
+              How much memory do you want to use
+              on each node? (default=%dGb) : """ % smallest_mem).strip()))
+    if memory == '':
+        memory = smallest_mem
+    else:
+        memory = int(memory)
+        if memory > max_mem:
+            print(textwrap.fill(textwrap.dedent("""\
+                You cannot request more than the maximum
+                memory on this type of node. (%d)""" % (max_mem),100)))
+            exit()
+
+    print('Using %d node(s) with %d cores and %d Gb\n' % 
+        (n_nodes, n_cores, memory))
     #--------------------------------------
 
     #--------------------------------------
@@ -477,7 +460,7 @@ def check_Gaussian_input():
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
-def write_Ikt_script():
+def write_torque_script():
     """Make a .pbs script based on user specifications."""
 
     for i in range(len(f_input)):
@@ -577,7 +560,7 @@ def write_Ikt_script():
 #----------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------
-def write_Mox_script():
+def write_slurm_script():
     """Make a .sh script based on user specifications."""
 
     # Loop over the input files
@@ -699,6 +682,6 @@ def print_help():
 if __name__ == '__main__':
     get_user_input()
     check_Gaussian_input()
-    write_Mox_script()
+    write_slurm_script()
 #----------------------------------------------------------------------------
 
