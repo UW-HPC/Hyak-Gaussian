@@ -579,7 +579,8 @@ def write_slurm_script():
         f.write(textwrap.dedent("""\
             #!/bin/bash
             #SBATCH --job-name=%s
-            #SBATCH --nodes=%d""" % (f_input[i][0], n_nodes)))
+            #SBATCH --nodes=%d
+            #SBATCH --ntasks-per-node=%d""" % (f_input[i][0], n_nodes, n_cores)))
         if queue == 'bf' or queue == 'ckpt':
             f.write('\n#SBATCH --time=0:%d:00\n' % time)
         else:
