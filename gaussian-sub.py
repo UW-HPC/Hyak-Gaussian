@@ -587,7 +587,7 @@ def write_slurm_script():
             f.write('\n#SBATCH --time=%d:00:00\n' % time)
         f.write(textwrap.dedent("""\
             #SBATCH --mem=%dG
-            #SBATCH --workdir=%s
+            #SBATCH --chdir=%s
             #SBATCH --partition=%s
             #SBATCH --account=%s\n\n"""
             % (memory, pwd, partition, account))) 
