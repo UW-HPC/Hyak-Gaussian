@@ -541,7 +541,6 @@ def write_torque_script():
               \n
               # copy last log file to another name
               num=`ls -l %s*.log | wc -l`
-              let "num += 1"
               cp %s.log %s$num.log""" % (f_input[i][0], f_input[i][0], 
               f_input[i][0])))
  
