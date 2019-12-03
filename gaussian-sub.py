@@ -297,7 +297,7 @@ def get_user_input():
         default = 6
         unit    = 'hr'
         time = raw_input(textwrap.fill(textwrap.dedent("""\
-               For how many minutes do you want to run your
+               For how many hours do you want to run your
                calculation? (default=%d hr) : """ % default).strip(),100))
     if time == '': time = default
     else: time = int(time)
