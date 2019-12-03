@@ -105,7 +105,7 @@ def get_user_input():
         for group in groups:
             if 'hyak-' in group:
                 if 'test' not in group and 'highmem' not in group:
-                    if group.split('-')[1] in partitions:
+                    if group.split('-')[1] in partitions or group.split('-')[1] == 'genpool':
                         allocs.append(group)
         print('Whose allocation would you like to use?')
         for allocation in allocs:
@@ -129,7 +129,10 @@ def get_user_input():
     if queue == 'batch':
         print('Checking how many nodes are in this allocation...')
         allocation_name = allocation.split('-')
+        if allocation_name[1] == 'genpool':
+            allocation_name[1] = 'hpc'
         command = 'hyakalloc | grep '+allocation_name[1]
+        print(command)
         specs = Popen(command,stdout=PIPE,shell=True).stdout.read().split()
         max_nodes = int(specs[1])
         smallest_mem = int(specs[2][:-1])
@@ -291,18 +294,18 @@ def get_user_input():
                For how many hours do you want to run your
                calculation? (default=%d hr) : """ % default).strip(),100))
     else:
-        default = 260
-        unit    = 'min'
+        default = 6
+        unit    = 'hr'
         time = raw_input(textwrap.fill(textwrap.dedent("""\
                For how many minutes do you want to run your
-               calculation? (default=%d min) : """ % default).strip(),100))
+               calculation? (default=%d hr) : """ % default).strip(),100))
     if time == '': time = default
     else: time = int(time)
-    if queue == 'bf' and time != 260:
+    if queue == 'bf' and time < 6:
         print(textwrap.fill(textwrap.dedent("""\
-            You want to specify 260 min when using the bf queue
-            if you expect your job to run longer than 4 hrs. 
-            This is just a warning."""),100))
+            If you want your job to be resubmitted automatically on
+            the ckpt partition, you need to specify greater than
+            5 hours of runtime. This is just a warning."""),100))
     print('Running the calculation for %d %s(s)\n' % (time, unit))
     #--------------------------------------
 
@@ -572,6 +575,8 @@ def write_slurm_script():
         f = open(f_output[i],'w')
         short_name = re.split('-',allocation)[1]
         partition, account = short_name, short_name
+        if account == 'genpool':
+            partition = 'hpc'
         if queue == 'bf' or queue == 'ckpt':
             partition = queue
             account = short_name+'-ckpt'
@@ -581,10 +586,7 @@ def write_slurm_script():
             #SBATCH --job-name=%s
             #SBATCH --nodes=%d
             #SBATCH --ntasks-per-node=%d""" % (f_input[i][0], n_nodes, n_cores)))
-        if queue == 'bf' or queue == 'ckpt':
-            f.write('\n#SBATCH --time=0:%d:00\n' % time)
-        else:
-            f.write('\n#SBATCH --time=%d:00:00\n' % time)
+        f.write('\n#SBATCH --time=%d:00:00\n' % time)
         f.write(textwrap.dedent("""\
             #SBATCH --mem=%dG
             #SBATCH --chdir=%s
