@@ -245,7 +245,7 @@ def get_user_input():
     max_mem = max(mem_types)
 
     memory = raw_input(textwrap.fill(textwrap.dedent("""\
-              How much memory do you want to use
+              How much memory, in Gb, do you want to use
               on each node? (default=All Available) : """).strip()))
     if memory == '':
         memory = smallest_mem
