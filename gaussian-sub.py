@@ -691,10 +691,10 @@ def write_slurm_script():
                 \tstring+=","
                 done 
                 string+=${nodes[$SLURM_NNODES-1]}
-                sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" %s
+                sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" $inputfile
  
                 # check that the Linda nodes are correct
-                lindaline=(`grep -i 'lindaworker' %s`)
+                lindaline=(`grep -i 'lindaworker' $inputfile`)
                 if [[ $lindaline == *$string ]]
                 then
                 \techo "Using the correct nodes for Linda"
@@ -703,7 +703,7 @@ def write_slurm_script():
                 \techo "Nodes assigned by scheduler = $string"
                 \techo "Line in Gaussian input file = $lindaline"
                 \texit 1
-                fi """ % (gauss_input, gauss_input)))
+                fi """ )))
  
         if queue == 'bf' or queue == 'ckpt':
             f.write(textwrap.dedent("""\
@@ -723,7 +723,7 @@ def write_slurm_script():
         f.write(textwrap.dedent("""\
             \n
             # run Gaussian
-            %s %s 
+            %s $inputfile
  
             exit 0 """ % (command, gauss_input)))
 
