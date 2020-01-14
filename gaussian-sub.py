@@ -7,7 +7,12 @@ import os
 import re
 
 import textwrap
-from subprocess import Popen, PIPE
+try:
+    from subprocess import check_output
+    from subprocess import Popen, PIPE
+except ImportError:
+    print('\nERROR: Must load at least anaconda_2.3 environment on Ikt\n')
+    sys.exit()
 
 '''
   Patrick J. Lestrange 2017
@@ -27,6 +32,7 @@ def get_user_input():
 
     global f_input, gdv, queue, allocation, version, n_nodes
     global linda, n_cores, time, f_output, gen, memory
+    global lclScr, email, memory_write
     gdv = False
 
     #--------------------------------------
@@ -115,7 +121,8 @@ def get_user_input():
         if allocation == '':
             print(textwrap.fill(textwrap.dedent("""\
                 ERROR: You must specify an allocation"""),100))
-            sys.exit()
+            #sys.exit()
+            allocation = 'hyak-stf'
         elif allocation not in allocs:
             print(textwrap.fill(textwrap.dedent("""\
                 ERROR: You must choose an allocation that you 
@@ -166,7 +173,18 @@ def get_user_input():
             using more than one node. Some version also require including
             %UseSSH in your Gaussian input file."""),60)) 
     #--------------------------------------
- 
+    # Ask to set the local scratch during printing
+    lclScr = raw_input('Set scratch locally? (y or n): ')
+    writeScr = None
+    if lclScr == '' or lclScr == 'n': lclScr = 0
+    else: lclScr = 1
+
+    #--------------------------------------
+    #Ask about where to send email notifications
+    whoami = re.sub('\n', '', os.popen('whoami').readlines()[0])
+    email = raw_input("Is %s@uw.edu the correct email, else what is?: " %whoami)    
+    if email == '': email = whoami
+
     #--------------------------------------
     # Ask how many cores/memory on each node to use.
     print('Checking what types of nodes are in this allocation...')
@@ -222,16 +240,19 @@ def get_user_input():
         specs = Popen(command, stdout=PIPE, shell=True).stdout.read().split()
     # - 10 for os overhead
     mem_types = [int(specs[2*i+1])//1000 - 10 for i in range(len(specs)//2)]
-    smallest_mem = min(mem_types)
+    #smallest_mem = min(mem_types)
+    smallest_mem = 0 #Default all mem
     max_mem = max(mem_types)
 
     memory = raw_input(textwrap.fill(textwrap.dedent("""\
               How much memory do you want to use
-              on each node? (default=%dGb) : """ % smallest_mem).strip()))
+              on each node? (default=All Available) : """).strip()))
     if memory == '':
         memory = smallest_mem
+        memory_write='0'
     else:
         memory = int(memory)
+        memory_write=str(memory)+'G'
         if memory > max_mem:
             print(textwrap.fill(textwrap.dedent("""\
                 You cannot request more than the maximum
@@ -275,7 +296,7 @@ def get_user_input():
             bad_version = True
     elif version_name[0] == 'gdv':
         if version_name[1] not in gdv_versions:
-						bad_version = True
+            bad_version = True
     else:
         bad_version = True
     if bad_version:
@@ -287,6 +308,8 @@ def get_user_input():
 
     #--------------------------------------
     # Check what the max walltime should be.
+    max_time = 750000
+    lim = 240
     if queue != 'bf' and queue != 'ckpt':
         default = 1
         unit    = 'hr'
@@ -307,6 +330,20 @@ def get_user_input():
             the ckpt partition, you need to specify greater than
             5 hours of runtime. This is just a warning."""),100))
     print('Running the calculation for %d %s(s)\n' % (time, unit))
+
+    #Check on MAXTIME
+    time_lim = max_time / 60 / n_nodes / n_cores
+    if time > time_lim  or time > lim:#Checking doesn't exceed max time or 10 d
+      print(textwrap.fill(textwrap.dedent("""\
+            WARNING:
+            You have asked for %i hours on %i nodes with %i processing cores.
+            If you are submitting to the stf queue this will exceed your
+            timelimit (%d hours).  To correct this either request less time,
+            fewer nodes, or fewer processing cores. If this causes an issue, 
+            or you have questions please contact hpcc@uw.edu.\n""" % \
+            (time, n_nodes, n_cores, min(time_lim, lim))),100))
+
+
     #--------------------------------------
 
     #--------------------------------------
@@ -584,18 +621,23 @@ def write_slurm_script():
             #!/bin/bash
             #SBATCH --job-name=%s
             #SBATCH --nodes=%d
-            #SBATCH --ntasks-per-node=%d""" % (f_input[i][0], n_nodes, n_cores)))
+            #SBATCH --cpus-per-task=%d""" % (f_input[i][0], n_nodes, n_cores)))
         f.write('\n#SBATCH --time=%d:00:00\n' % time)
         f.write(textwrap.dedent("""\
-            #SBATCH --mem=%dG
+            #SBATCH --mem=%s
             #SBATCH --chdir=%s
+            #SBATCH --mail-type=FAIL,END
+            #SBATCH --mail-user=%s@uw.edu
+
             #SBATCH --partition=%s
             #SBATCH --account=%s\n\n"""
-            % (memory, pwd, partition, account))) 
+            % (memory_write, pwd, email, partition, account))) 
         f.write(textwrap.dedent("""\
             # load Gaussian environment
             module load contrib/%s
- 
+            export inputfile=%s
+
+
             # debugging information
             echo "**** Job Debugging Information ****"
             echo "This job will run on $SLURM_JOB_NODELIST"
@@ -603,8 +645,40 @@ def write_slurm_script():
             echo "ENVIRONMENT VARIABLES"
             set
             echo "**********************************************" """ 
-            % version))
- 
+            % (version,gauss_input)))
+
+        if lclScr != 0:
+            f.write(textwrap.dedent("""\
+                \n
+                # local scratch
+                export GAUSS_SCRDIR='%s'
+                """ % (pwd)))
+    
+        else:
+            f.write(textwrap.dedent("""\
+                \n
+                # scrubbed scratch
+                export scrDir='/gscratch/scrubbed/%s/'
+                mkdir -p $scrDir
+                export GAUSS_SCRDIR=$scrDir
+                """ % (email)))
+
+        f.write(textwrap.dedent("""\
+            \n
+            ## Memory
+            gbmem=`expr $SLURM_MEM_PER_NODE / 1000`
+            gbmem=`expr $gbmem - 10`
+            echo "Parsed memory: $gbmem"
+            sed -i "/mem/s/.*/%mem=${gbmem}GB/" $inputfile
+            """))
+
+        f.write(textwrap.dedent("""\
+            \n
+            ## Set number of threads
+            sed -i "/nproc/s/.*/%nprocshared=$SLURM_JOB_CPUS_PER_NODE/" $inputfile
+            """))
+
+
         if linda:
             f.write(textwrap.dedent("""\
                 \n
