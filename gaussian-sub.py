@@ -635,7 +635,7 @@ def write_slurm_script():
         f.write(textwrap.dedent("""\
             # load Gaussian environment
             module load contrib/%s
-            export inputfile=%s
+            export inputfile='%s'
 
 
             # debugging information
@@ -675,7 +675,8 @@ def write_slurm_script():
         f.write(textwrap.dedent("""\
             \n
             ## Set number of threads
-            sed -i "/nproc/s/.*/%nprocshared=$SLURM_JOB_CPUS_PER_NODE/" $inputfile
+            export num_threads=$(echo $SLURM_JOB_CPUS_PER_NODE| cut -f1 -d"(" )
+            sed -i "/nproc/s/.*/%nprocshared=${num_threads}/" $inputfile
             """))
 
 
@@ -691,7 +692,7 @@ def write_slurm_script():
                 \tstring+=","
                 done 
                 string+=${nodes[$SLURM_NNODES-1]}
-                sed -i -e "s/%%LindaWorker.*/%%LindaWorker=$string/Ig" $inputfile
+                sed -i -e "s/\%LindaWorker.*/\%LindaWorker=$string/gI" "$inputfile"
  
                 # check that the Linda nodes are correct
                 lindaline=(`grep -i 'lindaworker' $inputfile`)
@@ -703,7 +704,7 @@ def write_slurm_script():
                 \techo "Nodes assigned by scheduler = $string"
                 \techo "Line in Gaussian input file = $lindaline"
                 \texit 1
-                fi """ )))
+                fi """ ))
  
         if queue == 'bf' or queue == 'ckpt':
             f.write(textwrap.dedent("""\
@@ -725,7 +726,7 @@ def write_slurm_script():
             # run Gaussian
             %s $inputfile
  
-            exit 0 """ % (command, gauss_input)))
+            exit 0 """ % (command)))
 
         print("""Please run 'sbatch %s' to submit to the scheduler\n""" 
               % f_output[i])
