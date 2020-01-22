@@ -121,8 +121,8 @@ def get_user_input():
         if allocation == '':
             print(textwrap.fill(textwrap.dedent("""\
                 ERROR: You must specify an allocation"""),100))
-            #sys.exit()
-            allocation = 'hyak-stf'
+            sys.exit()
+            #allocation = 'hyak-stf'
         elif allocation not in allocs:
             print(textwrap.fill(textwrap.dedent("""\
                 ERROR: You must choose an allocation that you 
